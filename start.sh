@@ -60,8 +60,17 @@ check_prerequisites() {
         if ! command_exists docker; then
             missing+=("docker")
         fi
-        if ! command_exists docker-compose && ! docker compose version >/dev/null 2>&1; then
-            missing+=("docker-compose")
+        # Check for docker-compose (v1) or docker compose (v2)
+        if ! command_exists docker-compose; then
+            if ! docker compose version >/dev/null 2>&1; then
+                echo -e "${RED}Docker Compose not found.${NC}"
+                echo ""
+                echo "Options:"
+                echo "  1. Install Docker Compose: sudo pacman -S docker-compose"
+                echo "  2. Run locally instead: ./start.sh local"
+                echo ""
+                exit 1
+            fi
         fi
     else
         if ! command_exists python3; then
