@@ -126,7 +126,7 @@ export function useProctoring({
     if (!state.sessionId) return;
 
     try {
-      await api.post(`/proctoring/${state.sessionId}/end`);
+      await api.post(`/proctoring/${state.sessionId}/end`, {});
 
       // Track session end
       track('proctoring_session_ended', {
