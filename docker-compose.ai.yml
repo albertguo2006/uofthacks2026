@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector for tree-based context engine
+  postgres-vector:
+    image: pgvector/pgvector:pg16
+    container_name: postgres-vector
+    environment:
+      POSTGRES_USER: skillproof
+      POSTGRES_PASSWORD: skillproof123
+      POSTGRES_DB: behavioral_context
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skillproof"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and task queue
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Celery worker for async AI processing
+  celery-worker:
+    build: ./apps/api
+    container_name: celery-worker
+    command: celery -A services.tasks worker --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://skillproof:skillproof123@postgres-vector:5432/behavioral_context
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - redis
+      - postgres-vector
+    volumes:
+      - ./apps/api:/app
+
+volumes:
+  postgres_data:
+  redis_data:
