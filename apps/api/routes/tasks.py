@@ -252,6 +252,41 @@ async def submit_solution(
         upsert=True,
     )
 
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": current_user["user_id"],
+        "session_id": submission.session_id,
+        "task_id": task_id,
+        "event_type": "task_submitted",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "tests_passed": passed_count,
+            "tests_total": total_count,
+            "passed": passed,
+            "score": score,
+        },
+        "forwarded_to_amplitude": False,
+        "processed_for_ml": False,
+    }
+
+    await Collections.events().insert_one(event_doc)
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=current_user["user_id"],
+        event_type="task_submitted",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "session_id": submission.session_id,
+            "task_id": task_id,
+            "tests_passed": passed_count,
+            "tests_total": total_count,
+            "passed": passed,
+            "score": score,
+        },
+    )
+
     # Save the submitted code to user's saved_code collection
     await Collections.db()["saved_code"].update_one(
         {"user_id": current_user["user_id"], "task_id": task_id},
