@@ -29,3 +29,7 @@ class Collections:
     @staticmethod
     def videos():
         return get_db().videos
+
+    @staticmethod
+    def interventions():
+        return get_db().interventions

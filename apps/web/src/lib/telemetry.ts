@@ -59,4 +59,32 @@ export const telemetry = {
 
   pasteBurstDetected: (sessionId: string, taskId: string, charsPasted: number, burstMs: number) =>
     track('paste_burst_detected', { session_id: sessionId, task_id: taskId, chars_pasted: charsPasted, burst_ms: burstMs }),
+
+  // New semantic events for AI analysis
+  semanticBlockAdded: (sessionId: string, taskId: string, blockType: string, count: number = 1) =>
+    track('semantic_block_added', { session_id: sessionId, task_id: taskId, type: blockType, count }),
+
+  libraryImport: (sessionId: string, taskId: string, count: number = 1) =>
+    track('library_import', { session_id: sessionId, task_id: taskId, count }),
+
+  testCaseAuthored: (sessionId: string, taskId: string, count: number = 1) =>
+    track('test_case_authored', { session_id: sessionId, task_id: taskId, count }),
+
+  solutionDraftStarted: (sessionId: string, taskId: string, timeSinceStartMs: number) =>
+    track('solution_draft_started', { session_id: sessionId, task_id: taskId, time_since_start_ms: timeSinceStartMs }),
+
+  refactorInitiated: (sessionId: string, taskId: string, timeSincePassMs: number) =>
+    track('refactor_initiated', { session_id: sessionId, task_id: taskId, time_since_pass_ms: timeSincePassMs }),
+
+  executionErrorStreak: (sessionId: string, taskId: string, errorType: string, streakCount: number) =>
+    track('execution_error_streak', { session_id: sessionId, task_id: taskId, error_type: errorType, streak_count: streakCount }),
+
+  docsLookup: (sessionId: string, taskId: string) =>
+    track('docs_lookup', { session_id: sessionId, task_id: taskId }),
+
+  hintDisplayed: (sessionId: string, taskId: string, hintCategory: string) =>
+    track('hint_displayed', { session_id: sessionId, task_id: taskId, hint_category: hintCategory }),
+
+  hintAcknowledged: (sessionId: string, taskId: string, hintCategory: string, helpfulRating?: number) =>
+    track('hint_acknowledged', { session_id: sessionId, task_id: taskId, hint_category: hintCategory, helpful_rating: helpfulRating }),
 };

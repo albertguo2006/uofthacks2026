@@ -1,70 +1,315 @@
+"""
+TwelveLabs Video Intelligence Service
+
+Provides interview video analysis capabilities:
+- Video indexing with Marengo engine
+- Semantic search within videos
+- Interview summary generation with Pegasus
+- Highlight clip extraction
+- Communication style analysis
+"""
+
 import httpx
+import asyncio
 import os
+import json
 from datetime import datetime
+from typing import Optional
 from config import get_settings
 from db.collections import Collections
 
 TWELVELABS_API_URL = "https://api.twelvelabs.io/v1.2"
 
 
-async def get_or_create_index() -> str:
-    """Get or create a TwelveLabs index for the application."""
-    settings = get_settings()
+class TwelveLabsService:
+    """
+    TwelveLabs integration for interview video understanding.
+    Uses Marengo for indexing and Pegasus for generation.
+    """
 
-    if not settings.twelvelabs_api_key:
-        return None
+    def __init__(self):
+        settings = get_settings()
+        self.api_key = settings.twelvelabs_api_key
+        self.index_id = settings.twelvelabs_index_id
 
-    headers = {
-        "x-api-key": settings.twelvelabs_api_key,
-        "Content-Type": "application/json",
-    }
+    async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        **kwargs
+    ) -> dict:
+        """Make authenticated request to TwelveLabs API."""
+        if not self.api_key:
+            return {"error": "TwelveLabs API key not configured"}
 
-    index_name = "proof-of-skill-interviews"
-
-    try:
-        async with httpx.AsyncClient() as client:
-            # List existing indexes
-            response = await client.get(
-                f"{TWELVELABS_API_URL}/indexes",
-                headers=headers,
-                timeout=30.0,
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.request(
+                method,
+                f"{TWELVELABS_API_URL}{endpoint}",
+                headers={"x-api-key": self.api_key},
+                **kwargs
             )
+            response.raise_for_status()
+            return response.json()
 
-            if response.status_code == 200:
-                indexes = response.json().get("data", [])
-                for index in indexes:
-                    if index["index_name"] == index_name:
-                        return index["_id"]
-
-            # Create new index
-            response = await client.post(
-                f"{TWELVELABS_API_URL}/indexes",
-                headers=headers,
-                json={
-                    "index_name": index_name,
-                    "engines": [
-                        {
-                            "engine_name": "marengo2.6",
-                            "engine_options": ["visual", "conversation", "text_in_video"],
-                        },
-                        {
-                            "engine_name": "pegasus1.1",
-                            "engine_options": ["visual", "conversation"],
-                        },
-                    ],
-                },
-                timeout=30.0,
-            )
-
-            if response.status_code in [200, 201]:
-                return response.json().get("_id")
-
-            print(f"Failed to create TwelveLabs index: {response.text}")
+    async def get_or_create_index(self) -> Optional[str]:
+        """Get or create a TwelveLabs index for the application."""
+        if not self.api_key:
             return None
 
-    except Exception as e:
-        print(f"TwelveLabs index error: {e}")
-        return None
+        # Use configured index if available
+        if self.index_id:
+            return self.index_id
+
+        index_name = "skillpulse-interviews"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                headers = {
+                    "x-api-key": self.api_key,
+                    "Content-Type": "application/json",
+                }
+
+                # List existing indexes
+                response = await client.get(
+                    f"{TWELVELABS_API_URL}/indexes",
+                    headers=headers,
+                    timeout=30.0,
+                )
+
+                if response.status_code == 200:
+                    indexes = response.json().get("data", [])
+                    for index in indexes:
+                        if index["index_name"] == index_name:
+                            return index["_id"]
+
+                # Create new index
+                response = await client.post(
+                    f"{TWELVELABS_API_URL}/indexes",
+                    headers=headers,
+                    json={
+                        "index_name": index_name,
+                        "engines": [
+                            {
+                                "engine_name": "marengo2.6",
+                                "engine_options": ["visual", "conversation", "text_in_video"],
+                            },
+                            {
+                                "engine_name": "pegasus1.1",
+                                "engine_options": ["visual", "conversation"],
+                            },
+                        ],
+                    },
+                    timeout=30.0,
+                )
+
+                if response.status_code in [200, 201]:
+                    return response.json().get("_id")
+
+                print(f"Failed to create TwelveLabs index: {response.text}")
+                return None
+
+        except Exception as e:
+            print(f"TwelveLabs index error: {e}")
+            return None
+
+    async def index_interview_video(
+        self,
+        video_url: str,
+        user_id: str,
+        session_id: str
+    ) -> dict:
+        """
+        Upload and index an interview recording.
+        Returns task_id for polling status.
+        """
+        index_id = await self.get_or_create_index()
+        if not index_id:
+            return {"error": "Failed to get or create index"}
+
+        try:
+            result = await self._request(
+                "POST",
+                "/tasks",
+                json={
+                    "index_id": index_id,
+                    "url": video_url,
+                    "metadata": {
+                        "user_id": user_id,
+                        "session_id": session_id,
+                        "type": "coding_interview",
+                    },
+                },
+            )
+            return {
+                "task_id": result.get("_id"),
+                "status": result.get("status"),
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    async def get_task_status(self, task_id: str) -> dict:
+        """Check video indexing status."""
+        try:
+            result = await self._request("GET", f"/tasks/{task_id}")
+            return {
+                "status": result.get("status"),
+                "video_id": result.get("video_id"),
+                "error": result.get("error"),
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    async def search_interview_moments(
+        self,
+        video_id: str,
+        query: str
+    ) -> list:
+        """
+        Semantic search within interview video.
+        Example queries: "explaining their approach", "debugging", "discussing tradeoffs"
+        """
+        index_id = await self.get_or_create_index()
+        if not index_id:
+            return []
+
+        try:
+            result = await self._request(
+                "POST",
+                "/search",
+                json={
+                    "index_id": index_id,
+                    "query": query,
+                    "search_options": ["visual", "conversation", "text_in_video"],
+                    "filter": {"id": [video_id]},
+                    "threshold": "medium",
+                },
+            )
+            return [
+                {
+                    "start": clip.get("start"),
+                    "end": clip.get("end"),
+                    "confidence": clip.get("confidence"),
+                    "thumbnail_url": clip.get("thumbnail_url"),
+                    "transcript": clip.get("metadata", {}).get("transcript", ""),
+                }
+                for clip in result.get("data", [])
+            ]
+        except Exception as e:
+            print(f"TwelveLabs search error: {e}")
+            return []
+
+    async def generate_interview_summary(self, video_id: str) -> str:
+        """
+        Generate a comprehensive summary of the interview using Pegasus.
+        """
+        try:
+            result = await self._request(
+                "POST",
+                "/summarize",
+                json={
+                    "video_id": video_id,
+                    "type": "summary",
+                    "prompt": """Summarize this coding interview session. Include:
+1. The candidate's problem-solving approach
+2. How they handled debugging and errors
+3. Their communication clarity when explaining decisions
+4. Key technical decisions they made
+5. Overall impression of their engineering style""",
+                },
+            )
+            return result.get("summary", "")
+        except Exception as e:
+            print(f"TwelveLabs summary error: {e}")
+            return ""
+
+    async def generate_highlights(self, video_id: str) -> str:
+        """Generate bullet-point highlights for quick recruiter review."""
+        try:
+            result = await self._request(
+                "POST",
+                "/generate",
+                json={
+                    "video_id": video_id,
+                    "type": "highlight",
+                    "prompt": "Extract the top 5 most impressive or notable moments from this coding interview.",
+                },
+            )
+            return result.get("data", "")
+        except Exception as e:
+            print(f"TwelveLabs highlights error: {e}")
+            return ""
+
+    async def extract_highlight_clips(self, video_id: str) -> list:
+        """
+        Extract key moments for recruiter review using semantic search.
+        Returns timestamped clips for each category.
+        """
+        highlight_queries = [
+            ("approach", "candidate explaining their problem-solving approach"),
+            ("debugging", "candidate debugging and fixing an error"),
+            ("tradeoffs", "candidate discussing tradeoffs or alternative solutions"),
+            ("questions", "candidate asking clarifying questions"),
+            ("testing", "candidate discussing or writing tests"),
+            ("optimization", "candidate optimizing or refactoring code"),
+        ]
+
+        highlights = []
+        for category, query in highlight_queries:
+            try:
+                moments = await self.search_interview_moments(video_id, query)
+                for moment in moments[:2]:  # Top 2 per category
+                    highlights.append({
+                        "category": category,
+                        "query": query,
+                        "start": moment["start"],
+                        "end": moment["end"],
+                        "confidence": moment["confidence"],
+                        "transcript": moment.get("transcript", ""),
+                    })
+            except Exception as e:
+                print(f"Error extracting {category} highlights: {e}")
+
+        # Sort by confidence and return top highlights
+        highlights.sort(key=lambda x: x.get("confidence", 0), reverse=True)
+        return highlights[:10]
+
+    async def analyze_communication_style(self, video_id: str) -> dict:
+        """
+        Analyze candidate's communication patterns using Pegasus.
+        """
+        try:
+            result = await self._request(
+                "POST",
+                "/generate",
+                json={
+                    "video_id": video_id,
+                    "type": "text",
+                    "prompt": """Analyze the candidate's communication style in this coding interview.
+Rate each aspect from 1-5 and provide a brief justification:
+- Clarity: How clearly do they explain technical concepts?
+- Confidence: How confident do they sound when presenting solutions?
+- Collaboration: Do they think out loud and invite feedback?
+- Technical depth: Do they use appropriate technical terminology?
+Return as JSON: {"clarity": {"score": X, "reason": "..."}, ...}""",
+                },
+            )
+            try:
+                return json.loads(result.get("data", "{}"))
+            except json.JSONDecodeError:
+                return {}
+        except Exception as e:
+            print(f"TwelveLabs communication analysis error: {e}")
+            return {}
+
+
+# Standalone functions for background tasks (backward compatibility)
+
+
+async def get_or_create_index() -> Optional[str]:
+    """Get or create a TwelveLabs index for the application."""
+    service = TwelveLabsService()
+    return await service.get_or_create_index()
 
 
 async def upload_video_to_twelvelabs(
@@ -79,18 +324,16 @@ async def upload_video_to_twelvelabs(
         # TwelveLabs not configured
         await Collections.videos().update_one(
             {"_id": video_id},
-            {"$set": {"status": "ready"}},  # Mark as ready without actual processing
+            {"$set": {"status": "ready"}},
         )
         return
 
     try:
-        # Update status
         await Collections.videos().update_one(
             {"_id": video_id},
             {"$set": {"status": "indexing"}},
         )
 
-        # Get or create index
         index_id = await get_or_create_index()
         if not index_id:
             await Collections.videos().update_one(
@@ -99,9 +342,7 @@ async def upload_video_to_twelvelabs(
             )
             return
 
-        headers = {
-            "x-api-key": settings.twelvelabs_api_key,
-        }
+        headers = {"x-api-key": settings.twelvelabs_api_key}
 
         async with httpx.AsyncClient() as client:
             # Upload video
@@ -114,7 +355,7 @@ async def upload_video_to_twelvelabs(
                     headers=headers,
                     files=files,
                     data=data,
-                    timeout=300.0,  # 5 minutes for upload
+                    timeout=300.0,
                 )
 
             if response.status_code not in [200, 201]:
@@ -129,7 +370,6 @@ async def upload_video_to_twelvelabs(
             task_id = result.get("_id")
             twelvelabs_video_id = result.get("video_id")
 
-            # Update with TwelveLabs IDs
             await Collections.videos().update_one(
                 {"_id": video_id},
                 {
@@ -142,108 +382,78 @@ async def upload_video_to_twelvelabs(
                 },
             )
 
-            # Poll for completion (in production, use webhooks)
+            # Poll for completion
+            service = TwelveLabsService()
             for _ in range(60):  # Max 5 minutes
                 await asyncio.sleep(5)
 
-                status_response = await client.get(
-                    f"{TWELVELABS_API_URL}/tasks/{task_id}",
-                    headers=headers,
-                    timeout=30.0,
-                )
+                status = await service.get_task_status(task_id)
 
-                if status_response.status_code == 200:
-                    task_status = status_response.json().get("status")
-                    if task_status == "ready":
-                        await Collections.videos().update_one(
-                            {"_id": video_id},
-                            {
-                                "$set": {
-                                    "status": "ready",
-                                    "ready_at": datetime.utcnow(),
-                                }
-                            },
-                        )
+                if status["status"] == "ready":
+                    twelvelabs_video_id = status["video_id"]
 
-                        # Update passport with video
-                        await Collections.passports().update_one(
-                            {"user_id": user_id},
-                            {"$set": {"interview_video_id": video_id}},
-                        )
+                    # Run full analysis
+                    summary, highlights, communication = await asyncio.gather(
+                        service.generate_interview_summary(twelvelabs_video_id),
+                        service.extract_highlight_clips(twelvelabs_video_id),
+                        service.analyze_communication_style(twelvelabs_video_id),
+                    )
 
-                        # Clean up temp file
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
+                    await Collections.videos().update_one(
+                        {"_id": video_id},
+                        {
+                            "$set": {
+                                "status": "ready",
+                                "twelvelabs_video_id": twelvelabs_video_id,
+                                "summary": summary,
+                                "highlights": highlights,
+                                "communication_analysis": communication,
+                                "ready_at": datetime.utcnow(),
+                            }
+                        },
+                    )
 
-                        return
+                    # Update passport with video insights
+                    await Collections.passports().update_one(
+                        {"user_id": user_id},
+                        {
+                            "$set": {
+                                "interview_video_id": video_id,
+                                "interview_summary": summary,
+                                "interview_highlights": highlights,
+                                "communication_scores": communication,
+                            }
+                        },
+                    )
 
-                    elif task_status == "failed":
-                        await Collections.videos().update_one(
-                            {"_id": video_id},
-                            {"$set": {"status": "failed"}},
-                        )
-                        return
+                    # Clean up temp file
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+
+                    return
+
+                elif status["status"] == "failed":
+                    await Collections.videos().update_one(
+                        {"_id": video_id},
+                        {"$set": {"status": "failed", "error": status.get("error")}},
+                    )
+                    return
 
             # Timeout
             await Collections.videos().update_one(
                 {"_id": video_id},
-                {"$set": {"status": "failed"}},
+                {"$set": {"status": "failed", "error": "Indexing timeout"}},
             )
 
     except Exception as e:
         print(f"TwelveLabs upload error: {e}")
         await Collections.videos().update_one(
             {"_id": video_id},
-            {"$set": {"status": "failed"}},
+            {"$set": {"status": "failed", "error": str(e)}},
         )
 
 
 async def search_video(twelvelabs_video_id: str, query: str) -> list[dict]:
     """Search a video for specific moments."""
-    settings = get_settings()
-
-    if not settings.twelvelabs_api_key or not twelvelabs_video_id:
-        return []
-
-    headers = {
-        "x-api-key": settings.twelvelabs_api_key,
-        "Content-Type": "application/json",
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{TWELVELABS_API_URL}/search",
-                headers=headers,
-                json={
-                    "query": query,
-                    "index_id": await get_or_create_index(),
-                    "search_options": ["visual", "conversation"],
-                    "filter": {"id": [twelvelabs_video_id]},
-                },
-                timeout=30.0,
-            )
-
-            if response.status_code != 200:
-                print(f"TwelveLabs search failed: {response.text}")
-                return []
-
-            results = response.json().get("data", [])
-
-            return [
-                {
-                    "start_time": r.get("start", 0),
-                    "end_time": r.get("end", 0),
-                    "confidence": r.get("confidence", 0),
-                    "transcript": r.get("metadata", {}).get("text", ""),
-                }
-                for r in results
-            ]
-
-    except Exception as e:
-        print(f"TwelveLabs search error: {e}")
-        return []
-
-
-# Import asyncio for the polling loop
-import asyncio
+    service = TwelveLabsService()
+    return await service.search_interview_moments(twelvelabs_video_id, query)

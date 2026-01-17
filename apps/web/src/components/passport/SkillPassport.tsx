@@ -4,6 +4,8 @@ import { Passport } from '@/types/passport';
 import { ArchetypeBadge } from './ArchetypeBadge';
 import { SkillVector } from './SkillVector';
 import { EvidenceList } from './EvidenceList';
+import { RadarChartWithLegend } from './RadarChart';
+import { useRadar } from '@/hooks/useRadar';
 
 interface SkillPassportProps {
   passport: Passport;
@@ -11,6 +13,9 @@ interface SkillPassportProps {
 }
 
 export function SkillPassport({ passport, compact = false }: SkillPassportProps) {
+  // Fetch Engineering DNA radar profile
+  const { radarProfile, radarSummary } = useRadar(passport.user_id, { enablePolling: false });
+
   if (compact) {
     return (
       <div className="bg-white dark:bg-slate-800 rounded-lg p-6">
@@ -64,7 +69,23 @@ export function SkillPassport({ passport, compact = false }: SkillPassportProps)
         </div>
       </div>
 
-      {/* Skill Vector Visualization */}
+      {/* Engineering DNA Radar */}
+      {radarProfile && (
+        <div>
+          <h3 className="font-semibold mb-3">Engineering DNA</h3>
+          <div className="flex flex-col md:flex-row items-start gap-6">
+            <RadarChartWithLegend profile={radarProfile} size={200} />
+            {radarSummary && (
+              <div className="flex-1 p-4 bg-gray-50 dark:bg-slate-700 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-500 mb-2">AI Summary</h4>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{radarSummary}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Skill Vector Visualization (Legacy) */}
       {passport.metrics && (
         <div>
           <h3 className="font-semibold mb-3">Skill Profile</h3>

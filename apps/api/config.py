@@ -23,6 +23,15 @@ class Settings(BaseSettings):
 
     # TwelveLabs
     twelvelabs_api_key: str = ""
+    twelvelabs_index_id: str = ""
+
+    # Backboard.io (Multi-model AI)
+    backboard_api_key: str = ""
+
+    # AI Intervention Settings
+    ai_hint_enabled: bool = True
+    frustration_threshold_errors: int = 3
+    frustration_threshold_time_ms: int = 120000  # 2 minutes
 
     # Sandbox
     sandbox_runner_url: str = "http://localhost:8080"

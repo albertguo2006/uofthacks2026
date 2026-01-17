@@ -10,18 +10,58 @@ from services.skillgraph import compute_job_fit
 router = APIRouter()
 
 
+def compute_radar_fit(candidate_radar: dict, job_target_radar: dict) -> float:
+    """
+    Compute fit score between candidate radar and job requirements.
+    Returns 0.0 to 1.0.
+    """
+    dimensions = ["verification", "velocity", "optimization", "decomposition", "debugging"]
+
+    if not candidate_radar or not job_target_radar:
+        return 0.5  # Default neutral score
+
+    candidate_vec = [
+        candidate_radar.get(d, {}).get("score", 0.5)
+        if isinstance(candidate_radar.get(d), dict)
+        else candidate_radar.get(d, 0.5)
+        for d in dimensions
+    ]
+    target_vec = [job_target_radar.get(d, 0.5) for d in dimensions]
+
+    # Weighted cosine similarity (weight by confidence)
+    confidence_weights = [
+        candidate_radar.get(d, {}).get("confidence", 0.5)
+        if isinstance(candidate_radar.get(d), dict)
+        else 0.5
+        for d in dimensions
+    ]
+
+    dot_product = sum(c * t * w for c, t, w in zip(candidate_vec, target_vec, confidence_weights))
+    magnitude_c = sum(c**2 * w for c, w in zip(candidate_vec, confidence_weights)) ** 0.5
+    magnitude_t = sum(t**2 for t in target_vec) ** 0.5
+
+    if magnitude_c == 0 or magnitude_t == 0:
+        return 0.5
+
+    return dot_product / (magnitude_c * magnitude_t)
+
+
 @router.get("", response_model=JobsResponse)
 async def list_jobs(
     include_locked: bool = Query(False, description="Include locked jobs"),
     current_user: dict = Depends(get_current_user),
 ):
-    """Get jobs matching user's skill vector."""
+    """Get jobs matching user's skill vector and radar profile."""
     # Get user's passport
     passport = await Collections.passports().find_one({"user_id": current_user["user_id"]})
 
     user_skill_vector = passport.get("skill_vector", []) if passport else []
     user_metrics = passport.get("metrics", {}) if passport else {}
     user_archetype = passport.get("archetype") if passport else None
+
+    # Get user's radar profile from users collection
+    user_doc = await Collections.users().find_one({"_id": current_user["user_id"]})
+    user_radar_profile = user_doc.get("radar_profile", {}) if user_doc else {}
 
     # Get sessions count
     sessions_count = await Collections.sessions().count_documents(
@@ -33,11 +73,22 @@ async def list_jobs(
     jobs = []
 
     async for job in cursor:
-        # Compute fit score
-        fit_score = compute_job_fit(
+        # Compute legacy skill vector fit
+        skill_vector_fit = compute_job_fit(
             user_vector=user_skill_vector,
             job_vector=job.get("target_vector", []),
         )
+
+        # Compute radar-based fit (if job has target_radar)
+        job_target_radar = job.get("target_radar", {})
+        radar_fit = compute_radar_fit(user_radar_profile, job_target_radar)
+
+        # Combine scores (weighted average: 40% skill vector, 60% radar)
+        # If job has target_radar, use combined score; otherwise use skill vector only
+        if job_target_radar:
+            fit_score = (skill_vector_fit * 0.4) + (radar_fit * 0.6)
+        else:
+            fit_score = skill_vector_fit
 
         # Check if unlocked
         unlocked = True

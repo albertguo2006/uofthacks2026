@@ -6,6 +6,7 @@ from middleware.auth import get_current_user
 from db.collections import Collections
 from models.event import TrackEvent, TrackEventResponse
 from services.amplitude import forward_to_amplitude
+from services.ai_worker import trigger_analysis
 
 router = APIRouter()
 
@@ -50,6 +51,14 @@ async def track_event(
             "task_id": event.task_id,
         },
     )
+
+    # Trigger AI analysis for intervention detection on relevant events
+    if event.event_type in ["run_attempted", "error_emitted", "code_changed"]:
+        background_tasks.add_task(
+            trigger_analysis,
+            session_id=event.session_id,
+            user_id=current_user["user_id"],
+        )
 
     return TrackEventResponse(
         event_id=event_id,
@@ -98,6 +107,14 @@ async def track_events_batch(
                 "task_id": event.task_id,
             },
         )
+
+        # Trigger AI analysis for intervention detection on relevant events
+        if event.event_type in ["run_attempted", "error_emitted", "code_changed"]:
+            background_tasks.add_task(
+                trigger_analysis,
+                session_id=event.session_id,
+                user_id=current_user["user_id"],
+            )
 
     return {
         "event_ids": event_ids,
