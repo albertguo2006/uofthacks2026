@@ -20,6 +20,7 @@ async def connect_db():
     await _db.passports.create_index("user_id", unique=True)
     await _db.tasks.create_index("task_id", unique=True)
     await _db.jobs.create_index("job_id", unique=True)
+    await _db.skill_proficiencies.create_index("user_id", unique=True)
 
     print("Connected to MongoDB")
 
