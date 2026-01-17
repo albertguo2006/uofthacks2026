@@ -4,42 +4,103 @@
   "description": "## Problem\n\nThe `createOrder` function accepts user input without validation, which could lead to invalid orders being created.\n\n## Requirements\n\n1. Validate `items` is a non-empty array\n2. Each item must have: `productId` (string), `quantity` (positive integer), `price` (positive number)\n3. Validate `shippingAddress` has: `street`, `city`, `zipCode`, `country`\n4. `zipCode` must be 5 digits (US format)\n5. Return `{ success: false, errors: [...] }` for invalid input\n6. Return `{ success: true, orderId: <generated> }` for valid input\n\n## Hints\n\n- Create helper validation functions\n- Collect all errors, don't stop at first one",
   "difficulty": "medium",
   "category": "feature",
-  "language": "javascript",
-  "starter_code": "function createOrder(items, shippingAddress) {\n  // TODO: Add validation\n  \n  const orderId = 'ORD-' + Math.random().toString(36).substr(2, 9);\n  return { success: true, orderId };\n}\n\nmodule.exports = { createOrder };",
   "solution_code": "function validateItem(item, index) {\n  const errors = [];\n  \n  if (!item.productId || typeof item.productId !== 'string') {\n    errors.push(`Item ${index + 1}: productId must be a string`);\n  }\n  if (!Number.isInteger(item.quantity) || item.quantity < 1) {\n    errors.push(`Item ${index + 1}: quantity must be a positive integer`);\n  }\n  if (typeof item.price !== 'number' || item.price <= 0) {\n    errors.push(`Item ${index + 1}: price must be a positive number`);\n  }\n  \n  return errors;\n}\n\nfunction validateAddress(address) {\n  const errors = [];\n  const required = ['street', 'city', 'zipCode', 'country'];\n  \n  for (const field of required) {\n    if (!address || !address[field]) {\n      errors.push(`Address: ${field} is required`);\n    }\n  }\n  \n  if (address?.zipCode && !/^\\d{5}$/.test(address.zipCode)) {\n    errors.push('Address: zipCode must be 5 digits');\n  }\n  \n  return errors;\n}\n\nfunction createOrder(items, shippingAddress) {\n  const errors = [];\n  \n  if (!Array.isArray(items) || items.length === 0) {\n    errors.push('Items must be a non-empty array');\n  } else {\n    items.forEach((item, i) => errors.push(...validateItem(item, i)));\n  }\n  \n  errors.push(...validateAddress(shippingAddress));\n  \n  if (errors.length > 0) {\n    return { success: false, errors };\n  }\n  \n  const orderId = 'ORD-' + Math.random().toString(36).substr(2, 9);\n  return { success: true, orderId };\n}\n\nmodule.exports = { createOrder };",
   "test_cases": [
     {
       "input": {
-        "items": [{"productId": "SKU-001", "quantity": 2, "price": 29.99}],
-        "shippingAddress": {"street": "123 Main St", "city": "Boston", "zipCode": "02101", "country": "USA"}
+        "items": [
+          {
+            "productId": "SKU-001",
+            "quantity": 2,
+            "price": 29.99
+          }
+        ],
+        "shippingAddress": {
+          "street": "123 Main St",
+          "city": "Boston",
+          "zipCode": "02101",
+          "country": "USA"
+        }
       },
-      "expected_output": {"success": true},
+      "expected_output": {
+        "success": true
+      },
       "hidden": false
     },
     {
       "input": {
         "items": [],
-        "shippingAddress": {"street": "123 Main St", "city": "Boston", "zipCode": "02101", "country": "USA"}
+        "shippingAddress": {
+          "street": "123 Main St",
+          "city": "Boston",
+          "zipCode": "02101",
+          "country": "USA"
+        }
       },
-      "expected_output": {"success": false, "errors": ["Items must be a non-empty array"]},
+      "expected_output": {
+        "success": false,
+        "errors": [
+          "Items must be a non-empty array"
+        ]
+      },
       "hidden": false
     },
     {
       "input": {
-        "items": [{"productId": "SKU-001", "quantity": -1, "price": 29.99}],
-        "shippingAddress": {"street": "123 Main St", "city": "Boston", "zipCode": "02101", "country": "USA"}
+        "items": [
+          {
+            "productId": "SKU-001",
+            "quantity": -1,
+            "price": 29.99
+          }
+        ],
+        "shippingAddress": {
+          "street": "123 Main St",
+          "city": "Boston",
+          "zipCode": "02101",
+          "country": "USA"
+        }
       },
-      "expected_output": {"success": false},
+      "expected_output": {
+        "success": false
+      },
       "hidden": true
     },
     {
       "input": {
-        "items": [{"productId": "SKU-001", "quantity": 1, "price": 29.99}],
-        "shippingAddress": {"street": "123 Main St", "city": "Boston", "zipCode": "1234", "country": "USA"}
+        "items": [
+          {
+            "productId": "SKU-001",
+            "quantity": 1,
+            "price": 29.99
+          }
+        ],
+        "shippingAddress": {
+          "street": "123 Main St",
+          "city": "Boston",
+          "zipCode": "1234",
+          "country": "USA"
+        }
       },
-      "expected_output": {"success": false},
+      "expected_output": {
+        "success": false
+      },
       "hidden": true
     }
   ],
-  "time_limit_seconds": 5
+  "time_limit_seconds": 5,
+  "languages": [
+    "javascript"
+  ],
+  "starter_codes": {
+    "javascript": "function createOrder(items, shippingAddress) {\n  // TODO: Add validation\n  \n  const orderId = 'ORD-' + Math.random().toString(36).substr(2, 9);\n  return { success: true, orderId };\n}\n\nmodule.exports = { createOrder };"
+  },
+  "proctored": false,
+  "tags": [
+    "error-handling",
+    "functions",
+    "strings",
+    "validation",
+    "arrays"
+  ]
 }

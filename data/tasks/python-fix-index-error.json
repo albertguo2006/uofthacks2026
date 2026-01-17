@@ -4,35 +4,73 @@
   "description": "## Problem\n\nThe `get_element` function crashes with an IndexError when accessing elements that don't exist in the list.\n\n## Requirements\n\n1. Return `None` if the index is out of bounds (negative or >= length)\n2. Return `None` if the list is empty or None\n3. Return the element at the given index otherwise\n\n## Hints\n\n- Check the list validity before accessing\n- Consider both positive and negative index bounds",
   "difficulty": "easy",
   "category": "bugfix",
-  "language": "python",
-  "starter_code": "def solution(data):\n    items = data['items']\n    index = data['index']\n    return items[index]",
   "solution_code": "def solution(data):\n    items = data.get('items')\n    index = data.get('index')\n    \n    if items is None or not isinstance(items, list):\n        return None\n    if index is None or index < 0 or index >= len(items):\n        return None\n    \n    return items[index]",
   "test_cases": [
     {
-      "input": {"items": ["a", "b", "c"], "index": 1},
+      "input": {
+        "items": [
+          "a",
+          "b",
+          "c"
+        ],
+        "index": 1
+      },
       "expected_output": "b",
       "hidden": false
     },
     {
-      "input": {"items": [10, 20, 30], "index": 5},
+      "input": {
+        "items": [
+          10,
+          20,
+          30
+        ],
+        "index": 5
+      },
       "expected_output": null,
       "hidden": false
     },
     {
-      "input": {"items": [], "index": 0},
+      "input": {
+        "items": [],
+        "index": 0
+      },
       "expected_output": null,
       "hidden": true
     },
     {
-      "input": {"items": null, "index": 0},
+      "input": {
+        "items": null,
+        "index": 0
+      },
       "expected_output": null,
       "hidden": true
     },
     {
-      "input": {"items": [1, 2, 3], "index": -1},
+      "input": {
+        "items": [
+          1,
+          2,
+          3
+        ],
+        "index": -1
+      },
       "expected_output": null,
       "hidden": true
     }
   ],
-  "time_limit_seconds": 5
+  "time_limit_seconds": 5,
+  "languages": [
+    "python"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    items = data['items']\n    index = data['index']\n    return items[index]"
+  },
+  "proctored": false,
+  "tags": [
+    "functions",
+    "debugging",
+    "error-handling",
+    "arrays"
+  ]
 }
