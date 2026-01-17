@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 
 from middleware.auth import get_current_user
 from db.collections import Collections
@@ -37,10 +37,76 @@ ARCHETYPES = {
     },
 }
 
+# Mock passport data for Jane Candidate in dev mode
+MOCK_JANE_PASSPORT = SkillPassport(
+    user_id="dev-candidate-123",
+    display_name="Jane Candidate",
+    archetype=Archetype(
+        name="craftsman",
+        label="Code Craftsman",
+        description="Focuses on clean, maintainable code with attention to detail",
+        confidence=0.87,
+    ),
+    skill_vector=[0.85, 0.78, 0.72, 0.68, 0.65, 0.82, 0.75, 0.80],
+    metrics=PassportMetrics(
+        iteration_velocity=0.72,
+        debug_efficiency=0.85,
+        craftsmanship=0.91,
+        tool_fluency=0.78,
+        integrity=1.0,
+    ),
+    sessions_completed=12,
+    tasks_passed=10,
+    notable_moments=[
+        NotableMoment(
+            type="achievement",
+            description="Solved complex async race condition in under 5 minutes",
+            session_id="session-001",
+        ),
+        NotableMoment(
+            type="insight",
+            description="Identified edge case that wasn't in the test suite",
+            session_id="session-003",
+        ),
+        NotableMoment(
+            type="achievement",
+            description="Refactored legacy code with zero regressions",
+            session_id="session-007",
+        ),
+    ],
+    interview=InterviewInfo(
+        has_video=True,
+        video_id="mock-video-123",
+        highlights=[
+            InterviewHighlight(
+                timestamp="02:34",
+                description="Explained approach to debugging systematically",
+                query="debugging methodology",
+            ),
+            InterviewHighlight(
+                timestamp="08:15",
+                description="Discussed trade-offs in architecture decisions",
+                query="system design",
+            ),
+        ],
+    ),
+)
+
 
 @router.get("/{user_id}", response_model=SkillPassport)
-async def get_passport(user_id: str, current_user: dict = Depends(get_current_user)):
+async def get_passport(user_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     """Get a user's skill passport."""
+    # Check for dev mode - return mock data
+    dev_mode = request.headers.get("X-Dev-Mode")
+    if dev_mode == "true":
+        if user_id == "dev-candidate-123" or current_user["user_id"] == "dev-candidate-123":
+            return MOCK_JANE_PASSPORT
+        # For any other user in dev mode, return a basic passport
+        return SkillPassport(
+            user_id=user_id,
+            display_name=f"Dev User {user_id}",
+        )
+    
     # Allow viewing own passport or if recruiter
     if current_user["user_id"] != user_id and current_user["role"] != "recruiter":
         raise HTTPException(
@@ -136,6 +202,6 @@ async def get_passport(user_id: str, current_user: dict = Depends(get_current_us
 
 
 @router.get("/me", response_model=SkillPassport)
-async def get_my_passport(current_user: dict = Depends(get_current_user)):
+async def get_my_passport(request: Request, current_user: dict = Depends(get_current_user)):
     """Get the current user's skill passport."""
-    return await get_passport(current_user["user_id"], current_user)
+    return await get_passport(current_user["user_id"], request, current_user)

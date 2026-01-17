@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ProtectedRouteProps {
@@ -11,10 +11,14 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, role }: ProtectedRouteProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading } = useAuth();
+  
+  // Check for dev mode bypass
+  const isDevMode = searchParams.get('dev') === 'true';
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading && !isDevMode) {
       if (!user) {
         router.push('/auth/login');
       } else if (role && user.role !== role) {
@@ -22,7 +26,12 @@ export function ProtectedRoute({ children, role }: ProtectedRouteProps) {
         router.push(user.role === 'recruiter' ? '/recruiter' : '/candidate');
       }
     }
-  }, [user, isLoading, role, router]);
+  }, [user, isLoading, role, router, isDevMode]);
+
+  // Allow access in dev mode without authentication
+  if (isDevMode) {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return (

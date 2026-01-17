@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArchetypeBadge } from '@/components/passport/ArchetypeBadge';
 import { api } from '@/lib/api';
 
@@ -26,6 +27,8 @@ const archetypes = [
 ];
 
 export default function CandidatesPage() {
+  const searchParams = useSearchParams();
+  const isDevMode = searchParams.get('dev') === 'true';
   const [selectedArchetype, setSelectedArchetype] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +50,12 @@ export default function CandidatesPage() {
     }
     fetchCandidates();
   }, [selectedArchetype]);
+
+  // Helper to build link with dev mode preserved
+  const getCandidateLink = (userId: string) => {
+    const base = `/recruiter/candidates/${userId}`;
+    return isDevMode ? `${base}?dev=true` : base;
+  };
 
   return (
     <div className="space-y-6">
@@ -88,7 +97,7 @@ export default function CandidatesPage() {
           {candidates.map((candidate) => (
             <Link
               key={candidate.user_id}
-              href={`/recruiter/candidates/${candidate.user_id}`}
+              href={getCandidateLink(candidate.user_id)}
               className="block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start">
