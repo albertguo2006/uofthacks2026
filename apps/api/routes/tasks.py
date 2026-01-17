@@ -151,7 +151,7 @@ async def run_code(
             detail="Task not found",
         )
 
-    language = submission.language or task["language"]
+    language = submission.language or task.get("language", "python")
 
     # Execute code against all test cases
     results = []
@@ -266,7 +266,7 @@ async def submit_solution(
             detail="Task not found",
         )
 
-    language = submission.language or task["language"]
+    language = submission.language or task.get("language", "python")
 
     # Run against ALL test cases (including hidden)
     passed_count = 0

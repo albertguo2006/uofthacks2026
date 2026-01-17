@@ -1,6 +1,7 @@
 {
   "task_id": "proctored-two-sum",
   "title": "Two Sum Challenge",
+  "language": "python",
   "description": "## Problem\n\nGiven an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.\n\n## Requirements\n\n1. Each input would have exactly one solution\n2. You may not use the same element twice\n3. You can return the answer in any order\n\n## Example\n\n```\nInput: nums = [2, 7, 11, 15], target = 9\nOutput: [0, 1]\nExplanation: Because nums[0] + nums[1] == 9, we return [0, 1].\n```",
   "difficulty": "easy",
   "category": "feature",
