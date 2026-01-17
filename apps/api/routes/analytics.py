@@ -4,6 +4,7 @@ from typing import Optional
 
 from middleware.auth import get_current_user
 from services.amplitude import fetch_event_segmentation, get_passport_analytics, fetch_user_event_counts
+from services.skillgraph import get_metrics_breakdown
 
 router = APIRouter()
 
@@ -19,6 +20,21 @@ class ActivityMetrics(BaseModel):
     total_test_runs: int
     total_submissions: int
     runs_per_submission: float
+    code_changes: int
+
+
+class AIAssistanceMetrics(BaseModel):
+    hints_requested: int
+    hints_acknowledged: int
+    chat_messages_sent: int
+    chat_help_requests: int
+    ai_reliance_score: float  # 0 = independent, 1 = heavily reliant
+
+
+class LearningMetrics(BaseModel):
+    errors_encountered: int
+    fixes_applied: int
+    fix_efficiency: float  # How quickly they fix errors (0-1)
 
 
 class IntegrityMetrics(BaseModel):
@@ -31,6 +47,8 @@ class PassportAnalyticsResponse(BaseModel):
     event_summary: dict
     session_stats: SessionStats
     activity_metrics: ActivityMetrics
+    ai_assistance_metrics: AIAssistanceMetrics
+    learning_metrics: LearningMetrics
     integrity_metrics: IntegrityMetrics
 
 
@@ -87,6 +105,33 @@ async def get_my_event_counts(
 ):
     """Get event counts for the current user."""
     return await fetch_user_event_counts(current_user["user_id"])
+
+
+@router.get("/metrics/breakdown")
+async def get_my_metrics_breakdown(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get a detailed breakdown of how your passport metrics were calculated.
+    Shows which tracked events contributed to each quality score.
+    """
+    return await get_metrics_breakdown(current_user["user_id"])
+
+
+@router.get("/metrics/breakdown/{user_id}")
+async def get_user_metrics_breakdown(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get metrics breakdown for a specific user (recruiters only).
+    """
+    if current_user["role"] != "recruiter" and current_user["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only recruiters can view other users' metrics breakdown",
+        )
+    return await get_metrics_breakdown(user_id)
 
 
 @router.get("/amplitude/segmentation")

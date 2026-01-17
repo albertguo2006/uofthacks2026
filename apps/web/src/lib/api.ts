@@ -260,6 +260,19 @@ export interface PassportAnalytics {
     total_test_runs: number;
     total_submissions: number;
     runs_per_submission: number;
+    code_changes: number;
+  };
+  ai_assistance_metrics: {
+    hints_requested: number;
+    hints_acknowledged: number;
+    chat_messages_sent: number;
+    chat_help_requests: number;
+    ai_reliance_score: number;  // 0 = independent, 1 = heavily reliant
+  };
+  learning_metrics: {
+    errors_encountered: number;
+    fixes_applied: number;
+    fix_efficiency: number;  // How quickly they fix errors (0-1)
   };
   integrity_metrics: {
     violations: number;
@@ -277,6 +290,8 @@ const MOCK_PASSPORT_ANALYTICS: PassportAnalytics = {
     run_attempted: 45,
     error_emitted: 23,
     fix_applied: 21,
+    contextual_hint_shown: 5,
+    chat_help_requested: 3,
   },
   session_stats: {
     total_sessions: 12,
@@ -288,6 +303,19 @@ const MOCK_PASSPORT_ANALYTICS: PassportAnalytics = {
     total_test_runs: 47,
     total_submissions: 12,
     runs_per_submission: 3.9,
+    code_changes: 156,
+  },
+  ai_assistance_metrics: {
+    hints_requested: 5,
+    hints_acknowledged: 4,
+    chat_messages_sent: 8,
+    chat_help_requests: 3,
+    ai_reliance_score: 0.05,  // Very independent
+  },
+  learning_metrics: {
+    errors_encountered: 23,
+    fixes_applied: 21,
+    fix_efficiency: 0.91,
   },
   integrity_metrics: {
     violations: 0,
