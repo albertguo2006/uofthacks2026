@@ -25,7 +25,7 @@ export function PasskeyButton({ mode, onError }: PasskeyButtonProps) {
 
     try {
       // Get registration options from server
-      const options = await api.post('/auth/passkey/register/begin', {});
+      const options = await api.post('/auth/passkey/register/begin', {}) as { options: any };
 
       // Start WebAuthn registration
       const credential = await startRegistration(options.options);
@@ -55,7 +55,7 @@ export function PasskeyButton({ mode, onError }: PasskeyButtonProps) {
 
     try {
       // Get authentication options from server
-      const options = await api.post('/auth/passkey/authenticate/begin', { email });
+      const options = await api.post('/auth/passkey/authenticate/begin', { email }) as { options: any };
 
       // Start WebAuthn authentication
       const credential = await startAuthentication(options.options);
@@ -64,7 +64,7 @@ export function PasskeyButton({ mode, onError }: PasskeyButtonProps) {
       const response = await api.post('/auth/passkey/authenticate/complete', {
         email,
         credential,
-      });
+      }) as { user: any };
 
       setUser(response.user);
 
