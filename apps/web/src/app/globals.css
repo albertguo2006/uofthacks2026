@@ -27,6 +27,17 @@ body {
   min-height: 100vh;
 }
 
+/* Text selection */
+::selection {
+  background-color: #3b82f6;
+  color: white;
+}
+
+::-moz-selection {
+  background-color: #3b82f6;
+  color: white;
+}
+
 /* Monaco Editor customization */
 .monaco-editor {
   border-radius: 0.5rem;

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { SignOutButton } from '@/components/auth/SignOutButton';
 
 export default function RecruiterLayout({
   children,
@@ -30,9 +31,7 @@ export default function RecruiterLayout({
                 </Link>
               </div>
               <div className="flex items-center">
-                <button className="text-gray-600 hover:text-gray-900 dark:text-gray-300">
-                  Sign Out
-                </button>
+                <SignOutButton />
               </div>
             </div>
           </div>
