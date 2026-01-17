@@ -79,20 +79,18 @@ export function SkillPassport({ passport, compact = false, showAnalytics = false
       </div>
 
       {/* Skill Profile - Pentagon visualization with radar data */}
-      {radarProfile && (
-        <div>
-          <h3 className="font-semibold mb-3">Skill Profile</h3>
-          <div className="flex flex-col items-center">
-            <RadarPentagon profile={radarProfile} size={280} />
-          </div>
-          {radarSummary && (
-            <div className="mt-4 p-4 bg-gray-50 dark:bg-slate-700 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-500 mb-2">AI Summary</h4>
-              <p className="text-sm text-gray-700 dark:text-gray-300">{radarSummary}</p>
-            </div>
-          )}
+      <div>
+        <h3 className="font-semibold mb-3">Skill Profile</h3>
+        <div className="flex flex-col items-center">
+          <RadarPentagon profile={radarProfile} size={280} />
         </div>
-      )}
+        {radarSummary && (
+          <div className="mt-4 p-4 bg-gray-50 dark:bg-slate-700 rounded-lg">
+            <h4 className="text-sm font-medium text-gray-500 mb-2">AI Summary</h4>
+            <p className="text-sm text-gray-700 dark:text-gray-300">{radarSummary}</p>
+          </div>
+        )}
+      </div>
 
       {/* Engineering DNA - Bar charts showing skill proficiency */}
       <div>
