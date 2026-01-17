@@ -191,8 +191,9 @@ async def get_session_intervention(
     """
     session = await Collections.sessions().find_one({"session_id": session_id})
 
+    # Return empty intervention if session doesn't exist yet
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        return {"intervention": None}
 
     if session.get("user_id") != current_user["user_id"]:
         raise HTTPException(
