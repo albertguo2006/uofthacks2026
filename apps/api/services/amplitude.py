@@ -138,3 +138,121 @@ async def fetch_event_segmentation(
         )
         response.raise_for_status()
         return response.json()
+
+
+async def fetch_user_activity(user_id: str) -> dict:
+    """
+    Fetch a specific user's activity summary from Amplitude.
+    Returns event counts, session data, and user properties.
+    """
+    settings = get_settings()
+
+    if not settings.amplitude_api_key or not settings.amplitude_secret_key:
+        raise ValueError("Amplitude API key or secret key not configured")
+
+    print(f"{BLUE}[Amplitude] Fetching activity for user {user_id[:8]}...{RESET}")
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://amplitude.com/api/2/useractivity",
+            params={"user": user_id},
+            auth=(settings.amplitude_api_key, settings.amplitude_secret_key),
+            timeout=20.0,
+        )
+        
+        if response.status_code == 200:
+            print(f"{GREEN}[Amplitude] ✓ Fetched user activity{RESET}")
+            return response.json()
+        else:
+            print(f"{RED}[Amplitude] ✗ Failed to fetch user activity - HTTP {response.status_code}{RESET}")
+            return {}
+
+
+async def fetch_user_event_counts(user_id: str, event_types: list[str] = None) -> dict:
+    """
+    Get event counts for a specific user from local MongoDB.
+    This is faster than querying Amplitude and always available.
+    
+    Returns:
+        {
+            "test_cases_ran": 15,
+            "task_submitted": 5,
+            "proctoring_violation": 0,
+            ...
+        }
+    """
+    from db.collections import Collections
+    
+    query = {"user_id": user_id}
+    if event_types:
+        query["event_type"] = {"$in": event_types}
+    
+    pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$event_type", "count": {"$sum": 1}}},
+    ]
+    
+    cursor = Collections.events().aggregate(pipeline)
+    results = await cursor.to_list(length=100)
+    
+    return {item["_id"]: item["count"] for item in results}
+
+
+async def get_passport_analytics(user_id: str) -> dict:
+    """
+    Get comprehensive analytics for a user's skill passport.
+    Combines local MongoDB data with Amplitude insights.
+    
+    Returns metrics useful for the passport:
+    - Total test runs, submissions, pass rate
+    - Error patterns
+    - Session statistics
+    - Integrity indicators
+    """
+    from db.collections import Collections
+    
+    # Get event counts
+    event_counts = await fetch_user_event_counts(user_id)
+    
+    # Get session statistics
+    sessions = await Collections.sessions().find({
+        "user_id": user_id,
+        "submitted": True,
+    }).to_list(length=100)
+    
+    total_sessions = len(sessions)
+    passed_sessions = sum(1 for s in sessions if s.get("passed", False))
+    
+    # Get average scores
+    scores = [s.get("score", 0) for s in sessions if s.get("score") is not None]
+    avg_score = sum(scores) / len(scores) if scores else 0
+    
+    # Get violation count
+    violations = await Collections.events().count_documents({
+        "user_id": user_id,
+        "event_type": "proctoring_violation",
+    })
+    
+    # Calculate derived metrics
+    test_runs = event_counts.get("test_cases_ran", 0)
+    submissions = event_counts.get("task_submitted", 0)
+    
+    return {
+        "user_id": user_id,
+        "event_summary": event_counts,
+        "session_stats": {
+            "total_sessions": total_sessions,
+            "passed_sessions": passed_sessions,
+            "pass_rate": passed_sessions / total_sessions if total_sessions > 0 else 0,
+            "average_score": round(avg_score, 1),
+        },
+        "activity_metrics": {
+            "total_test_runs": test_runs,
+            "total_submissions": submissions,
+            "runs_per_submission": round(test_runs / submissions, 1) if submissions > 0 else 0,
+        },
+        "integrity_metrics": {
+            "violations": violations,
+            "integrity_score": max(0, 1.0 - (violations * 0.1)),  # -10% per violation
+        },
+    }

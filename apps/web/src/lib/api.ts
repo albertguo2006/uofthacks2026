@@ -228,6 +228,80 @@ class ApiClient {
   }> {
     return this.get(`/video/${videoId}/search?q=${encodeURIComponent(query)}`);
   }
+
+  // Analytics endpoints
+  async getPassportAnalytics(userId?: string): Promise<PassportAnalytics> {
+    if (isDevMode()) {
+      return MOCK_PASSPORT_ANALYTICS;
+    }
+    const endpoint = userId ? `/analytics/passport/${userId}` : '/analytics/passport';
+    return this.get(endpoint);
+  }
+
+  async getEventCounts(): Promise<Record<string, number>> {
+    if (isDevMode()) {
+      return MOCK_EVENT_COUNTS;
+    }
+    return this.get('/analytics/events/counts');
+  }
 }
+
+// Analytics types
+export interface PassportAnalytics {
+  user_id: string;
+  event_summary: Record<string, number>;
+  session_stats: {
+    total_sessions: number;
+    passed_sessions: number;
+    pass_rate: number;
+    average_score: number;
+  };
+  activity_metrics: {
+    total_test_runs: number;
+    total_submissions: number;
+    runs_per_submission: number;
+  };
+  integrity_metrics: {
+    violations: number;
+    integrity_score: number;
+  };
+}
+
+// Mock analytics for dev mode
+const MOCK_PASSPORT_ANALYTICS: PassportAnalytics = {
+  user_id: 'dev-candidate-123',
+  event_summary: {
+    test_cases_ran: 47,
+    task_submitted: 12,
+    code_changed: 156,
+    run_attempted: 45,
+    error_emitted: 23,
+    fix_applied: 21,
+  },
+  session_stats: {
+    total_sessions: 12,
+    passed_sessions: 10,
+    pass_rate: 0.83,
+    average_score: 87.5,
+  },
+  activity_metrics: {
+    total_test_runs: 47,
+    total_submissions: 12,
+    runs_per_submission: 3.9,
+  },
+  integrity_metrics: {
+    violations: 0,
+    integrity_score: 1.0,
+  },
+};
+
+const MOCK_EVENT_COUNTS: Record<string, number> = {
+  test_cases_ran: 47,
+  task_submitted: 12,
+  code_changed: 156,
+  run_attempted: 45,
+  error_emitted: 23,
+  fix_applied: 21,
+};
 
 export const api = new ApiClient();
