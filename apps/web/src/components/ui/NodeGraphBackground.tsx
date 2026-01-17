@@ -24,7 +24,7 @@ export default function NodeGraphBackground({
   nodeCount = 100,
   connectionDistance = 150,
   nodeColor = 'rgba(14, 165, 233, 0.8)',
-  edgeColor = 'rgba(14, 165, 233, 0.2)',
+  edgeColor = 'rgba(55, 183, 241, 0.2)',
   cursorInfluenceRadius = 150,
   cursorRepelStrength = 0.25,
   cursorTrailDelay = 0.05,
@@ -50,7 +50,7 @@ export default function NodeGraphBackground({
         y: Math.random() * height,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        radius: Math.random() * 3 + 2,
+        radius: Math.random() * 2 + 1,
       });
     }
     nodesRef.current = nodes;
@@ -140,7 +140,7 @@ export default function NodeGraphBackground({
 
     // Draw edges between nodes
     ctx.strokeStyle = edgeColor;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
 
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
