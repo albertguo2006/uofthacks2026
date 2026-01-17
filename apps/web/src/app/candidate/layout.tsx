@@ -22,7 +22,7 @@ export default function CandidateLayout({
             <div className="flex justify-between h-16">
               <div className="flex items-center space-x-8">
                 <Link href={`/candidate${devSuffix}`} className="font-bold text-lg">
-                  Proof of Skill
+                  Simply Authentic
                 </Link>
                 <Link
                   href={`/candidate/tasks${devSuffix}`}
