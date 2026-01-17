@@ -51,5 +51,9 @@ class Collections:
         return get_db().skill_proficiencies
 
     @staticmethod
+    def applications():
+        return get_db().applications
+
+    @staticmethod
     def db():
         return get_db()

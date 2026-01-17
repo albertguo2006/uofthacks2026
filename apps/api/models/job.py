@@ -47,3 +47,26 @@ class JobsResponse(BaseModel):
     jobs: list[JobMatch]
     user_skill_vector: Optional[list[float]] = None
     last_updated: datetime = Field(default_factory=datetime.utcnow)
+
+
+class JobCreate(BaseModel):
+    title: str
+    description: str
+    company: str
+    tier: int = Field(ge=0, le=2, default=0)
+    salary_range: str
+    location: str
+    tags: list[str] = []
+
+
+class RecruiterJob(BaseModel):
+    job_id: str
+    title: str
+    description: str
+    company: str
+    tier: int
+    salary_range: str
+    location: str
+    tags: list[str] = []
+    created_at: datetime
+    recruiter_id: str

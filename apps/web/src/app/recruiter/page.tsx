@@ -12,7 +12,17 @@ export default function RecruiterDashboard() {
         </p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Link
+          href="/recruiter/jobs"
+          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow border-2 border-primary-500"
+        >
+          <h3 className="text-lg font-semibold">My Job Postings</h3>
+          <p className="text-gray-600 dark:text-gray-300 mt-2">
+            Create and manage your job listings
+          </p>
+        </Link>
+
         <Link
           href="/recruiter/candidates"
           className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
