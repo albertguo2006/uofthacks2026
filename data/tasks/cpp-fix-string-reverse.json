@@ -1,0 +1,38 @@
+{
+  "task_id": "cpp-fix-string-reverse",
+  "title": "Fix String Reverse Bug",
+  "description": "## Problem\n\nThe `solution` function should reverse the input string but has an off-by-one error causing incorrect output.\n\n## Requirements\n\n1. Reverse the input string completely\n2. Handle empty strings (return empty)\n3. Handle single character strings\n\n## Hints\n\n- Check your loop bounds carefully\n- Consider using the standard library's reverse function\n- The input is passed as a plain string (already extracted from JSON)",
+  "difficulty": "easy",
+  "category": "bugfix",
+  "language": "cpp",
+  "starter_code": "#include <string>\n#include <algorithm>\n\nstd::string solution(std::string input) {\n    // Bug: off-by-one error in the loop\n    std::string result = input;\n    int n = result.length();\n    for (int i = 0; i < n / 2; i++) {\n        // Something is wrong here\n        char temp = result[i];\n        result[i] = result[n - i];\n        result[n - i] = temp;\n    }\n    return result;\n}",
+  "solution_code": "#include <string>\n#include <algorithm>\n\nstd::string solution(std::string input) {\n    std::string result = input;\n    int n = result.length();\n    for (int i = 0; i < n / 2; i++) {\n        char temp = result[i];\n        result[i] = result[n - 1 - i];\n        result[n - 1 - i] = temp;\n    }\n    return result;\n}",
+  "test_cases": [
+    {
+      "input": "\"hello\"",
+      "expected_output": "olleh",
+      "hidden": false
+    },
+    {
+      "input": "\"a\"",
+      "expected_output": "a",
+      "hidden": false
+    },
+    {
+      "input": "\"\"",
+      "expected_output": "",
+      "hidden": false
+    },
+    {
+      "input": "\"abcdef\"",
+      "expected_output": "fedcba",
+      "hidden": true
+    },
+    {
+      "input": "\"racecar\"",
+      "expected_output": "racecar",
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5
+}

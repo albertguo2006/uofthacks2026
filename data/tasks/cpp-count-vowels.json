@@ -1,0 +1,43 @@
+{
+  "task_id": "cpp-count-vowels",
+  "title": "Count Vowels Efficiently",
+  "description": "## Problem\n\nThe current implementation counts vowels but is inefficient and doesn't handle uppercase letters.\n\n## Requirements\n\n1. Count all vowels (a, e, i, o, u) in the input string\n2. Handle both uppercase and lowercase vowels\n3. Return the count as a string (e.g., \"5\")\n4. Return \"0\" for empty strings or strings with no vowels\n\n## Hints\n\n- Consider using a set or switch statement for O(1) lookup\n- Use tolower() or toupper() for case handling\n- Be careful with character comparisons",
+  "difficulty": "medium",
+  "category": "optimization",
+  "language": "cpp",
+  "starter_code": "#include <string>\n\nstd::string solution(std::string input) {\n    int count = 0;\n    // Inefficient: doesn't handle uppercase\n    for (int i = 0; i < input.length(); i++) {\n        if (input[i] == 'a' || input[i] == 'e' || \n            input[i] == 'i' || input[i] == 'o' || \n            input[i] == 'u') {\n            count++;\n        }\n    }\n    return std::to_string(count);\n}",
+  "solution_code": "#include <string>\n#include <cctype>\n\nstd::string solution(std::string input) {\n    int count = 0;\n    for (char c : input) {\n        char lower = std::tolower(c);\n        if (lower == 'a' || lower == 'e' || \n            lower == 'i' || lower == 'o' || \n            lower == 'u') {\n            count++;\n        }\n    }\n    return std::to_string(count);\n}",
+  "test_cases": [
+    {
+      "input": "\"hello\"",
+      "expected_output": "2",
+      "hidden": false
+    },
+    {
+      "input": "\"AEIOU\"",
+      "expected_output": "5",
+      "hidden": false
+    },
+    {
+      "input": "\"xyz\"",
+      "expected_output": "0",
+      "hidden": false
+    },
+    {
+      "input": "\"Hello World\"",
+      "expected_output": "3",
+      "hidden": true
+    },
+    {
+      "input": "\"\"",
+      "expected_output": "0",
+      "hidden": true
+    },
+    {
+      "input": "\"AaEeIiOoUu\"",
+      "expected_output": "10",
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5
+}
