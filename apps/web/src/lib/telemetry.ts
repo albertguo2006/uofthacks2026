@@ -87,4 +87,14 @@ export const telemetry = {
 
   hintAcknowledged: (sessionId: string, taskId: string, hintCategory: string, helpfulRating?: number) =>
     track('hint_acknowledged', { session_id: sessionId, task_id: taskId, hint_category: hintCategory, helpful_rating: helpfulRating }),
+
+  // Proctoring events
+  proctoringSessionStarted: (taskId: string, sessionId: string, cameraEnabled: boolean) =>
+    track('proctoring_session_started', { task_id: taskId, session_id: sessionId, camera_enabled: cameraEnabled }),
+
+  proctoringSessionEnded: (taskId: string, sessionId: string, violationCount: number) =>
+    track('proctoring_session_ended', { task_id: taskId, session_id: sessionId, violation_count: violationCount }),
+
+  proctoringViolation: (taskId: string, sessionId: string, violationType: string, details?: string) =>
+    track('proctoring_violation', { task_id: taskId, session_id: sessionId, violation_type: violationType, details }),
 };

@@ -33,3 +33,11 @@ class Collections:
     @staticmethod
     def interventions():
         return get_db().interventions
+
+    @staticmethod
+    def saved_code():
+        return get_db().saved_code
+
+    @staticmethod
+    def proctoring_sessions():
+        return get_db().proctoring_sessions

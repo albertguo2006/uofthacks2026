@@ -4,30 +4,52 @@
   "description": "## Problem\n\nThe `processUser` function crashes when passed a null or undefined user.\n\n## Requirements\n\n1. Return `null` if user is null/undefined\n2. Return `null` if user.name is null/undefined\n3. Return uppercase name otherwise\n\n## Hints\n\n- Consider using optional chaining or null checks\n- Think about all edge cases",
   "difficulty": "easy",
   "category": "bugfix",
-  "language": "javascript",
-  "starter_code": "function processUser(user) {\n  return user.name.toUpperCase();\n}\n\nmodule.exports = { processUser };",
   "solution_code": "function processUser(user) {\n  if (!user || !user.name) return null;\n  return user.name.toUpperCase();\n}\n\nmodule.exports = { processUser };",
   "test_cases": [
     {
-      "input": {"user": {"name": "Alice"}},
+      "input": {
+        "user": {
+          "name": "Alice"
+        }
+      },
       "expected_output": "ALICE",
       "hidden": false
     },
     {
-      "input": {"user": null},
+      "input": {
+        "user": null
+      },
       "expected_output": null,
       "hidden": false
     },
     {
-      "input": {"user": {"name": null}},
+      "input": {
+        "user": {
+          "name": null
+        }
+      },
       "expected_output": null,
       "hidden": true
     },
     {
-      "input": {"user": {}},
+      "input": {
+        "user": {}
+      },
       "expected_output": null,
       "hidden": true
     }
   ],
-  "time_limit_seconds": 5
+  "time_limit_seconds": 5,
+  "languages": [
+    "javascript"
+  ],
+  "starter_codes": {
+    "javascript": "function processUser(user) {\n  return user.name.toUpperCase();\n}\n\nmodule.exports = { processUser };"
+  },
+  "proctored": false,
+  "tags": [
+    "functions",
+    "debugging",
+    "null-handling"
+  ]
 }

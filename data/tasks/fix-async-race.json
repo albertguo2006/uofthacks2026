@@ -4,30 +4,63 @@
   "description": "## Problem\n\nThe `fetchUserData` function has a race condition. When called multiple times quickly, it may return stale data from an earlier request if that request completes after a later one.\n\n## Requirements\n\n1. Only return data from the most recent call\n2. Cancel or ignore results from superseded requests\n3. Handle errors appropriately\n4. Return `null` if the request was superseded\n\n## Hints\n\n- Consider using a request counter or AbortController\n- Track which request is \"current\"",
   "difficulty": "hard",
   "category": "bugfix",
-  "language": "javascript",
-  "starter_code": "// Simulated API call\nfunction mockFetch(userId, delay) {\n  return new Promise((resolve) => {\n    setTimeout(() => resolve({ id: userId, name: `User ${userId}` }), delay);\n  });\n}\n\n// This has a race condition!\nlet currentData = null;\n\nasync function fetchUserData(userId) {\n  const data = await mockFetch(userId, Math.random() * 1000);\n  currentData = data;\n  return currentData;\n}\n\nmodule.exports = { fetchUserData };",
   "solution_code": "function mockFetch(userId, delay) {\n  return new Promise((resolve) => {\n    setTimeout(() => resolve({ id: userId, name: `User ${userId}` }), delay);\n  });\n}\n\nlet requestId = 0;\nlet currentData = null;\n\nasync function fetchUserData(userId) {\n  const thisRequestId = ++requestId;\n  \n  const data = await mockFetch(userId, Math.random() * 1000);\n  \n  // Only update if this is still the latest request\n  if (thisRequestId === requestId) {\n    currentData = data;\n    return currentData;\n  }\n  \n  // This request was superseded\n  return null;\n}\n\nmodule.exports = { fetchUserData };",
   "test_cases": [
     {
-      "input": {"test": "single_call", "userId": 1},
-      "expected_output": {"id": 1, "name": "User 1"},
+      "input": {
+        "test": "single_call",
+        "userId": 1
+      },
+      "expected_output": {
+        "id": 1,
+        "name": "User 1"
+      },
       "hidden": false
     },
     {
-      "input": {"test": "latest_wins", "calls": [1, 2, 3]},
-      "expected_output": {"id": 3, "name": "User 3"},
+      "input": {
+        "test": "latest_wins",
+        "calls": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected_output": {
+        "id": 3,
+        "name": "User 3"
+      },
       "hidden": false
     },
     {
-      "input": {"test": "superseded_returns_null"},
+      "input": {
+        "test": "superseded_returns_null"
+      },
       "expected_output": true,
       "hidden": true
     },
     {
-      "input": {"test": "handles_rapid_calls", "count": 10},
+      "input": {
+        "test": "handles_rapid_calls",
+        "count": 10
+      },
       "expected_output": true,
       "hidden": true
     }
   ],
-  "time_limit_seconds": 10
+  "time_limit_seconds": 10,
+  "languages": [
+    "javascript"
+  ],
+  "starter_codes": {
+    "javascript": "// Simulated API call\nfunction mockFetch(userId, delay) {\n  return new Promise((resolve) => {\n    setTimeout(() => resolve({ id: userId, name: `User ${userId}` }), delay);\n  });\n}\n\n// This has a race condition!\nlet currentData = null;\n\nasync function fetchUserData(userId) {\n  const data = await mockFetch(userId, Math.random() * 1000);\n  currentData = data;\n  return currentData;\n}\n\nmodule.exports = { fetchUserData };"
+  },
+  "proctored": false,
+  "tags": [
+    "error-handling",
+    "functions",
+    "debugging",
+    "async",
+    "null-handling"
+  ]
 }

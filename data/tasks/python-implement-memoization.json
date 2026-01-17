@@ -4,40 +4,63 @@
   "description": "## Problem\n\nThe current `fibonacci` function is extremely slow for large numbers because it recalculates the same values repeatedly.\n\n## Requirements\n\n1. Implement memoization to cache previously computed values\n2. Return the nth Fibonacci number (0-indexed: fib(0)=0, fib(1)=1)\n3. Handle edge cases: return 0 for n < 0\n4. Must be efficient enough to compute fib(40) quickly\n\n## Hints\n\n- Use a dictionary to store computed values\n- Consider using a helper function with the cache\n- Python's `functools.lru_cache` is not allowed for this exercise",
   "difficulty": "medium",
   "category": "optimization",
-  "language": "python",
-  "starter_code": "def solution(data):\n    n = data['n']\n    # This implementation is too slow!\n    def fib(x):\n        if x <= 0:\n            return 0\n        if x == 1:\n            return 1\n        return fib(x - 1) + fib(x - 2)\n    \n    return fib(n)",
   "solution_code": "def solution(data):\n    n = data['n']\n    cache = {}\n    \n    def fib(x):\n        if x <= 0:\n            return 0\n        if x == 1:\n            return 1\n        if x in cache:\n            return cache[x]\n        \n        result = fib(x - 1) + fib(x - 2)\n        cache[x] = result\n        return result\n    \n    return fib(n)",
   "test_cases": [
     {
-      "input": {"n": 10},
+      "input": {
+        "n": 10
+      },
       "expected_output": 55,
       "hidden": false
     },
     {
-      "input": {"n": 0},
+      "input": {
+        "n": 0
+      },
       "expected_output": 0,
       "hidden": false
     },
     {
-      "input": {"n": 1},
+      "input": {
+        "n": 1
+      },
       "expected_output": 1,
       "hidden": false
     },
     {
-      "input": {"n": 20},
+      "input": {
+        "n": 20
+      },
       "expected_output": 6765,
       "hidden": true
     },
     {
-      "input": {"n": 40},
+      "input": {
+        "n": 40
+      },
       "expected_output": 102334155,
       "hidden": true
     },
     {
-      "input": {"n": -5},
+      "input": {
+        "n": -5
+      },
       "expected_output": 0,
       "hidden": true
     }
   ],
-  "time_limit_seconds": 5
+  "time_limit_seconds": 5,
+  "languages": [
+    "python"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    n = data['n']\n    # This implementation is too slow!\n    def fib(x):\n        if x <= 0:\n            return 0\n        if x == 1:\n            return 1\n        return fib(x - 1) + fib(x - 2)\n    \n    return fib(n)"
+  },
+  "proctored": false,
+  "tags": [
+    "functions",
+    "memoization",
+    "optimization",
+    "arrays"
+  ]
 }

@@ -4,30 +4,72 @@
   "description": "## Problem\n\nThe following code has duplicated validation logic that should be extracted into a reusable function.\n\n## Requirements\n\n1. Create a `validateEmail` function that returns `true` if valid, `false` otherwise\n2. Create a `validatePassword` function that checks: min 8 chars, has uppercase, has number\n3. Use these functions in `validateUser`\n4. Return `{ valid: boolean, errors: string[] }`\n\n## Hints\n\n- Use regex for email validation\n- Return early for invalid inputs",
   "difficulty": "medium",
   "category": "refactor",
-  "language": "javascript",
-  "starter_code": "function validateUser(email, password) {\n  const errors = [];\n  \n  // Email validation - duplicated pattern\n  if (!email) {\n    errors.push('Email is required');\n  } else if (!email.includes('@') || !email.includes('.')) {\n    errors.push('Invalid email format');\n  }\n  \n  // Password validation - duplicated pattern  \n  if (!password) {\n    errors.push('Password is required');\n  } else {\n    if (password.length < 8) errors.push('Password too short');\n    if (!/[A-Z]/.test(password)) errors.push('Password needs uppercase');\n    if (!/[0-9]/.test(password)) errors.push('Password needs number');\n  }\n  \n  return { valid: errors.length === 0, errors };\n}\n\nmodule.exports = { validateUser };",
   "solution_code": "function validateEmail(email) {\n  if (!email) return false;\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return emailRegex.test(email);\n}\n\nfunction validatePassword(password) {\n  if (!password || password.length < 8) return { valid: false, errors: ['Password must be at least 8 characters'] };\n  const errors = [];\n  if (!/[A-Z]/.test(password)) errors.push('Password needs uppercase');\n  if (!/[0-9]/.test(password)) errors.push('Password needs number');\n  return { valid: errors.length === 0, errors };\n}\n\nfunction validateUser(email, password) {\n  const errors = [];\n  \n  if (!validateEmail(email)) {\n    errors.push(email ? 'Invalid email format' : 'Email is required');\n  }\n  \n  const pwResult = validatePassword(password);\n  if (!password) {\n    errors.push('Password is required');\n  } else if (!pwResult.valid) {\n    errors.push(...pwResult.errors);\n  }\n  \n  return { valid: errors.length === 0, errors };\n}\n\nmodule.exports = { validateEmail, validatePassword, validateUser };",
   "test_cases": [
     {
-      "input": {"email": "test@example.com", "password": "Password123"},
-      "expected_output": {"valid": true, "errors": []},
+      "input": {
+        "email": "test@example.com",
+        "password": "Password123"
+      },
+      "expected_output": {
+        "valid": true,
+        "errors": []
+      },
       "hidden": false
     },
     {
-      "input": {"email": "", "password": "Password123"},
-      "expected_output": {"valid": false, "errors": ["Email is required"]},
+      "input": {
+        "email": "",
+        "password": "Password123"
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": [
+          "Email is required"
+        ]
+      },
       "hidden": false
     },
     {
-      "input": {"email": "invalid", "password": "Password123"},
-      "expected_output": {"valid": false, "errors": ["Invalid email format"]},
+      "input": {
+        "email": "invalid",
+        "password": "Password123"
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": [
+          "Invalid email format"
+        ]
+      },
       "hidden": true
     },
     {
-      "input": {"email": "test@example.com", "password": "short"},
-      "expected_output": {"valid": false, "errors": ["Password too short"]},
+      "input": {
+        "email": "test@example.com",
+        "password": "short"
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": [
+          "Password too short"
+        ]
+      },
       "hidden": true
     }
   ],
-  "time_limit_seconds": 5
+  "time_limit_seconds": 5,
+  "languages": [
+    "javascript"
+  ],
+  "starter_codes": {
+    "javascript": "function validateUser(email, password) {\n  const errors = [];\n  \n  // Email validation - duplicated pattern\n  if (!email) {\n    errors.push('Email is required');\n  } else if (!email.includes('@') || !email.includes('.')) {\n    errors.push('Invalid email format');\n  }\n  \n  // Password validation - duplicated pattern  \n  if (!password) {\n    errors.push('Password is required');\n  } else {\n    if (password.length < 8) errors.push('Password too short');\n    if (!/[A-Z]/.test(password)) errors.push('Password needs uppercase');\n    if (!/[0-9]/.test(password)) errors.push('Password needs number');\n  }\n  \n  return { valid: errors.length === 0, errors };\n}\n\nmodule.exports = { validateUser };"
+  },
+  "proctored": false,
+  "tags": [
+    "error-handling",
+    "functions",
+    "strings",
+    "validation",
+    "refactoring"
+  ]
 }

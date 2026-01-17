@@ -1,6 +1,8 @@
 'use client';
 
 import { Task } from '@/types/task';
+import { ProctoredBadge } from '@/components/ui/ProctoredBadge';
+import { TopicTag } from '@/components/ui/TopicTag';
 import ReactMarkdown from 'react-markdown';
 
 interface TaskHeaderProps {
@@ -18,18 +20,33 @@ export function TaskHeader({ task }: TaskHeaderProps) {
     <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold">{task.title}</h1>
-          <div className="flex gap-2 mt-2">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold">{task.title}</h1>
+            {task.proctored && <ProctoredBadge />}
+          </div>
+          <div className="flex flex-wrap gap-2 mt-2">
             <span className={`px-2 py-1 text-xs rounded ${difficultyColors[task.difficulty]}`}>
               {task.difficulty}
             </span>
             <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-slate-700 rounded">
               {task.category}
             </span>
-            <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
-              {task.language}
-            </span>
+            {task.languages && task.languages.length > 0 && (
+              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
+                {task.languages.length === 1
+                  ? task.languages[0]
+                  : task.languages.join(', ')}
+              </span>
+            )}
           </div>
+          {/* Topic Tags */}
+          {task.tags && task.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {task.tags.map((tag) => (
+                <TopicTag key={tag} tag={tag} />
+              ))}
+            </div>
+          )}
         </div>
         <div className="text-sm text-gray-500">
           Time limit: {task.time_limit_seconds}s per test
