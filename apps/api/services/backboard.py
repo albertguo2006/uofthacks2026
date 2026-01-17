@@ -1,11 +1,11 @@
 """
-Backboard.io Multi-Model AI Service
+Backboard.io Multi-Model AI Service + Direct Gemini API
 
-Provides adaptive memory and intelligent model switching for different tasks:
-- Claude for empathetic hints (anthropic/claude-3-haiku)
-- GPT-4o for code analysis (openai/gpt-4o-mini)
-- Gemini for profile summaries & chat (google/gemini-2.0-flash)
-- Cohere for job parsing (cohere/command-r)
+Model routing:
+- Claude for empathetic hints (via Backboard - anthropic/claude-3-haiku)
+- GPT-4o for code analysis (via Backboard - openai/gpt-4o-mini)
+- Gemini for profile summaries & chat (DIRECT Gemini API - gemini-2.0-flash)
+- Cohere for job parsing (via Backboard - cohere/command-r)
 """
 
 import httpx
@@ -14,6 +14,7 @@ from typing import Optional
 from config import get_settings
 
 BACKBOARD_BASE_URL = "https://api.backboard.io/v1"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 class BackboardService:
@@ -25,7 +26,10 @@ class BackboardService:
     def __init__(self, user_id: str):
         settings = get_settings()
         self.api_key = settings.backboard_api_key
+        self.gemini_api_key = settings.gemini_api_key
         self.user_id = user_id
+        # In-memory conversation history for Gemini (keyed by session)
+        self._gemini_history: dict[str, list] = {}
 
     async def _call_model(
         self,
@@ -85,6 +89,93 @@ class BackboardService:
         ]
         import random
         return random.choice(fallback_hints)
+
+    # =========================================================================
+    # GEMINI API - Direct calls (NOT through Backboard)
+    # =========================================================================
+
+    async def _call_gemini(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        session_key: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 500,
+    ) -> str:
+        """
+        Direct call to Gemini API (gemini-2.0-flash).
+        Supports conversation history via session_key.
+        """
+        if not self.gemini_api_key:
+            return self._fallback_response([{"content": prompt}])
+
+        try:
+            # Build contents with history if session_key provided
+            contents = []
+            
+            if session_key and session_key in self._gemini_history:
+                contents.extend(self._gemini_history[session_key])
+            
+            # Add current user message
+            contents.append({
+                "role": "user",
+                "parts": [{"text": prompt}]
+            })
+
+            payload = {
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens,
+                }
+            }
+
+            # Add system instruction if provided
+            if system_instruction:
+                payload["systemInstruction"] = {
+                    "parts": [{"text": system_instruction}]
+                }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{GEMINI_API_URL}/gemini-2.0-flash:generateContent?key={self.gemini_api_key}",
+                    headers={"Content-Type": "application/json"},
+                    json=payload,
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                response_text = result["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # Store conversation history if session_key provided
+                if session_key:
+                    if session_key not in self._gemini_history:
+                        self._gemini_history[session_key] = []
+                    
+                    # Add user message and response to history
+                    self._gemini_history[session_key].append({
+                        "role": "user",
+                        "parts": [{"text": prompt}]
+                    })
+                    self._gemini_history[session_key].append({
+                        "role": "model",
+                        "parts": [{"text": response_text}]
+                    })
+                    
+                    # Keep history limited to last 20 exchanges
+                    if len(self._gemini_history[session_key]) > 40:
+                        self._gemini_history[session_key] = self._gemini_history[session_key][-40:]
+                
+                return response_text
+
+        except Exception as e:
+            print(f"Gemini API error: {e}")
+            return self._fallback_response([{"content": prompt}])
+
+    def clear_gemini_history(self, session_key: str):
+        """Clear Gemini conversation history for a session."""
+        if session_key in self._gemini_history:
+            del self._gemini_history[session_key]
 
     # =========================================================================
     # HINT GENERATION - Claude (empathetic, pedagogical)
@@ -198,20 +289,15 @@ This is attempt #{attempt_count}. Please provide a helpful hint.""",
         )
 
     # =========================================================================
-    # PROFILE SUMMARIZATION - Gemini (structured analysis)
+    # PROFILE SUMMARIZATION - Gemini DIRECT API (structured analysis)
     # =========================================================================
 
     async def summarize_radar_profile(self, radar: dict, recent_events: list) -> str:
         """
-        Use Gemini for structured profile summarization.
-        Memory: Tracks how profile has evolved over time.
+        Use Gemini (direct API) for structured profile summarization.
+        Uses session key for memory of profile evolution.
         """
-        return await self._call_model(
-            model="google/gemini-2.0-flash",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""Summarize this developer's coding style based on their radar profile and recent behavior.
+        prompt = f"""Summarize this developer's coding style based on their radar profile and recent behavior.
 
 Radar Profile (scores 0-1):
 {json.dumps(radar, indent=2)}
@@ -224,28 +310,25 @@ Provide:
 2. Area for growth (1 sentence)
 3. How their style compares to their previous sessions (if you remember them)
 
-Keep it concise and actionable.""",
-                }
-            ],
-            memory_key="profile_history",
+Keep it concise and actionable."""
+
+        return await self._call_gemini(
+            prompt=prompt,
+            session_key=f"{self.user_id}:profile_history",
             temperature=0.6,
             max_tokens=200,
         )
 
     async def generate_archetype_description(self, archetype: str, radar: dict) -> str:
-        """Generate personalized archetype description based on actual scores."""
-        return await self._call_model(
-            model="google/gemini-2.0-flash",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""The developer has been classified as: "{archetype}"
+        """Generate personalized archetype description based on actual scores. Uses direct Gemini API."""
+        prompt = f"""The developer has been classified as: "{archetype}"
 
 Their radar scores: {json.dumps(radar, indent=2)}
 
-Write a 2-sentence personalized description of their engineering style that reflects their actual scores. Be specific, not generic.""",
-                }
-            ],
+Write a 2-sentence personalized description of their engineering style that reflects their actual scores. Be specific, not generic."""
+
+        return await self._call_gemini(
+            prompt=prompt,
             temperature=0.7,
             max_tokens=100,
         )
@@ -698,12 +781,7 @@ Difficulty: {task.get('difficulty', 'unknown')}"""
 
         error_info = f"\nCurrent Error: {error_context}" if error_context else ""
 
-        return await self._call_model(
-            model="google/gemini-2.0-flash",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are a helpful coding assistant for a coding assessment platform.
+        system_instruction = """You are a helpful coding assistant for a coding assessment platform.
 
 Rules:
 - Help the user understand concepts and debug issues
@@ -712,18 +790,18 @@ Rules:
 - Be concise but thorough (2-4 sentences typically)
 - Remember the conversation context
 - If they ask unrelated questions, redirect to the task
-- You can explain concepts, syntax, and debugging strategies""",
-                },
-                {
-                    "role": "user",
-                    "content": f"""{task_context}
+- You can explain concepts, syntax, and debugging strategies"""
+
+        prompt = f"""{task_context}
 
 {code_context}{error_info}
 
-User's question: {question}""",
-                },
-            ],
-            memory_key=f"session:{session_id}:chat",
+User's question: {question}"""
+
+        return await self._call_gemini(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            session_key=f"session:{session_id}:chat",
             temperature=0.7,
             max_tokens=400,
         )

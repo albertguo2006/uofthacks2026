@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # Backboard.io (Multi-model AI)
     backboard_api_key: str = ""
 
+    # Gemini API (direct)
+    gemini_api_key: str = ""
+
     # AI Intervention Settings
     ai_hint_enabled: bool = True
     frustration_threshold_errors: int = 3
