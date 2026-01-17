@@ -110,6 +110,7 @@ async def get_passport(user_id: str, current_user: dict = Depends(get_current_us
     if passport.get("interview_video_id"):
         interview = InterviewInfo(
             has_video=True,
+            video_id=passport.get("interview_video_id"),
             highlights=[
                 InterviewHighlight(
                     timestamp=f"{int(h['timestamp_start'] // 60):02d}:{int(h['timestamp_start'] % 60):02d}",

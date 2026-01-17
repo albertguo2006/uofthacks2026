@@ -103,6 +103,37 @@ class ApiClient {
       xhr.send(formData);
     });
   }
+
+  async getCandidates(archetype?: string): Promise<{
+    candidates: Array<{
+      user_id: string;
+      display_name: string;
+      email: string;
+      archetype: string | null;
+      archetype_label: string | null;
+      metrics: Record<string, number>;
+      sessions_completed: number;
+      has_video: boolean;
+    }>;
+    total: number;
+  }> {
+    const params = archetype ? `?archetype=${encodeURIComponent(archetype)}` : '';
+    return this.get(`/recruiter/candidates${params}`);
+  }
+
+  async searchVideo(
+    videoId: string,
+    query: string
+  ): Promise<{
+    results: Array<{
+      start_time: number;
+      end_time: number;
+      confidence: number;
+      transcript_snippet: string;
+    }>;
+  }> {
+    return this.get(`/video/${videoId}/search?q=${encodeURIComponent(query)}`);
+  }
 }
 
 export const api = new ApiClient();

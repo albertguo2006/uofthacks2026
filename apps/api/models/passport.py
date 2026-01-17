@@ -33,6 +33,7 @@ class InterviewHighlight(BaseModel):
 
 class InterviewInfo(BaseModel):
     has_video: bool = False
+    video_id: Optional[str] = None
     highlights: list[InterviewHighlight] = []
 
 

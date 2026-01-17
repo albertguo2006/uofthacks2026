@@ -1,26 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArchetypeBadge } from '@/components/passport/ArchetypeBadge';
+import { api } from '@/lib/api';
 
-// TODO: Replace with actual API call
-const mockCandidates = [
-  {
-    user_id: '1',
-    display_name: 'Jane Developer',
-    archetype: 'careful_tester',
-    metrics: { debug_efficiency: 0.82, craftsmanship: 0.71 },
-    sessions_completed: 12,
-  },
-  {
-    user_id: '2',
-    display_name: 'John Coder',
-    archetype: 'fast_iterator',
-    metrics: { debug_efficiency: 0.65, craftsmanship: 0.58 },
-    sessions_completed: 8,
-  },
-];
+type Candidate = {
+  user_id: string;
+  display_name: string;
+  email: string;
+  archetype: string | null;
+  archetype_label: string | null;
+  metrics: Record<string, number>;
+  sessions_completed: number;
+  has_video: boolean;
+};
 
 const archetypes = [
   { value: '', label: 'All Archetypes' },
@@ -32,10 +26,26 @@ const archetypes = [
 
 export default function CandidatesPage() {
   const [selectedArchetype, setSelectedArchetype] = useState('');
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredCandidates = selectedArchetype
-    ? mockCandidates.filter((c) => c.archetype === selectedArchetype)
-    : mockCandidates;
+  useEffect(() => {
+    async function fetchCandidates() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await api.getCandidates(selectedArchetype || undefined);
+        setCandidates(response.candidates);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch candidates');
+        setCandidates([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchCandidates();
+  }, [selectedArchetype]);
 
   return (
     <div className="space-y-6">
@@ -54,32 +64,69 @@ export default function CandidatesPage() {
         </select>
       </div>
 
-      <div className="grid gap-4">
-        {filteredCandidates.map((candidate) => (
-          <Link
-            key={candidate.user_id}
-            href={`/recruiter/candidates/${candidate.user_id}`}
-            className="block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-semibold">{candidate.display_name}</h3>
-                <div className="mt-2">
-                  <ArchetypeBadge archetype={candidate.archetype} />
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        </div>
+      )}
+
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {!isLoading && !error && candidates.length === 0 && (
+        <div className="text-center py-12 text-gray-600 dark:text-gray-400">
+          No candidates found
+        </div>
+      )}
+
+      {!isLoading && !error && candidates.length > 0 && (
+        <div className="grid gap-4">
+          {candidates.map((candidate) => (
+            <Link
+              key={candidate.user_id}
+              href={`/recruiter/candidates/${candidate.user_id}`}
+              className="block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">{candidate.display_name}</h3>
+                    {candidate.has_video && (
+                      <span className="px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full">
+                        Has Video
+                      </span>
+                    )}
+                  </div>
+                  {candidate.archetype && (
+                    <div className="mt-2">
+                      <ArchetypeBadge archetype={candidate.archetype} />
+                    </div>
+                  )}
+                  <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                    {candidate.metrics.debug_efficiency !== undefined && (
+                      <>
+                        <span>Debug Efficiency: {(candidate.metrics.debug_efficiency * 100).toFixed(0)}%</span>
+                        <span className="mx-2">•</span>
+                      </>
+                    )}
+                    {candidate.metrics.craftsmanship !== undefined && (
+                      <>
+                        <span>Craftsmanship: {(candidate.metrics.craftsmanship * 100).toFixed(0)}%</span>
+                        <span className="mx-2">•</span>
+                      </>
+                    )}
+                    <span>{candidate.sessions_completed} sessions</span>
+                  </div>
                 </div>
-                <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-                  <span>Debug Efficiency: {(candidate.metrics.debug_efficiency * 100).toFixed(0)}%</span>
-                  <span className="mx-2">•</span>
-                  <span>Craftsmanship: {(candidate.metrics.craftsmanship * 100).toFixed(0)}%</span>
-                  <span className="mx-2">•</span>
-                  <span>{candidate.sessions_completed} sessions</span>
-                </div>
+                <span className="text-primary-600">View Passport →</span>
               </div>
-              <span className="text-primary-600">View Passport →</span>
-            </div>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
