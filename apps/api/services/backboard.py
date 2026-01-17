@@ -163,6 +163,16 @@ class BackboardService:
         import random
         return random.choice(fallback_hints)
 
+    def _strip_markdown_json(self, response: str) -> str:
+        """Strip markdown code blocks from JSON response."""
+        clean = response.strip()
+        if clean.startswith("```"):
+            # Remove opening fence (```json or ```)
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+        if clean.endswith("```"):
+            clean = clean[:-3]
+        return clean.strip()
+
     # =========================================================================
     # GEMINI API - Direct calls (NOT through Backboard)
     # =========================================================================
@@ -473,7 +483,7 @@ Style guidance for runtime issues:
         )
 
         try:
-            return json.loads(response)
+            return json.loads(self._strip_markdown_json(response))
         except json.JSONDecodeError:
             return {"error_type": "unknown", "root_cause": response, "severity": 3}
 
@@ -572,7 +582,7 @@ Base scores on explicit and implicit requirements in the description."""
         )
 
         try:
-            return json.loads(response)
+            return json.loads(self._strip_markdown_json(response))
         except json.JSONDecodeError:
             return {
                 "verification": 0.5,
@@ -844,7 +854,7 @@ Rank all candidates from best to worst fit."""
         )
 
         try:
-            rankings = json.loads(response)
+            rankings = json.loads(self._strip_markdown_json(response))
             ranking_map = {r["id"]: r for r in rankings}
             for c in candidates:
                 cid = c.get("user_id") or c.get("_id")
@@ -918,7 +928,7 @@ Provide a comprehensive hiring analysis."""
         )
 
         try:
-            return json.loads(response)
+            return json.loads(self._strip_markdown_json(response))
         except json.JSONDecodeError:
             return {
                 "overall_score": 0.5,
