@@ -148,8 +148,8 @@ export default function SandboxPage() {
         </div>
       )}
 
-      <div className="flex-1 grid lg:grid-cols-2 gap-6 mt-6 min-h-[500px]">
-        <div className="flex flex-col min-h-[400px]">
+      <div className="flex-1 grid lg:grid-cols-2 gap-6 mt-6 min-h-[600px]">
+        <div className="flex flex-col min-h-[500px]">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">Code Editor</span>
             <div className="flex items-center gap-3">
@@ -188,7 +188,7 @@ export default function SandboxPage() {
           </div>
         </div>
 
-        <div className="flex flex-col min-h-[400px]">
+        <div className="flex flex-col min-h-[500px]">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">Output</span>
             <div className="flex gap-2">
