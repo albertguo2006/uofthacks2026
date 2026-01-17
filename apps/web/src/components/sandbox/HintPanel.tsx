@@ -3,10 +3,17 @@
 import { useState, useEffect } from 'react';
 import { Intervention } from '@/hooks/useRadar';
 
+interface HintContext {
+  attempts?: number;
+  repeated_errors?: boolean;
+  code_history_length?: number;
+}
+
 interface HintPanelProps {
   intervention: Intervention | null;
   onAcknowledge: () => void;
   onDismiss?: () => void;
+  context?: HintContext;
 }
 
 const HINT_CATEGORY_ICONS: Record<string, string> = {
@@ -23,7 +30,7 @@ const HINT_CATEGORY_COLORS: Record<string, string> = {
   encouragement: 'border-green-500 bg-green-500/10',
 };
 
-export function HintPanel({ intervention, onAcknowledge, onDismiss }: HintPanelProps) {
+export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: HintPanelProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -111,6 +118,21 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss }: HintPanelP
             <p className="text-sm text-gray-300 leading-relaxed">
               {intervention.hint}
             </p>
+
+            {/* Context info (if available) */}
+            {context && (context.attempts || context.code_history_length) && (
+              <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+                {context.attempts && (
+                  <span>Attempt #{context.attempts}</span>
+                )}
+                {context.code_history_length && context.code_history_length > 0 && (
+                  <span>{context.code_history_length} code changes analyzed</span>
+                )}
+                {context.repeated_errors && (
+                  <span className="text-yellow-500">Repeated error pattern detected</span>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="mt-3 flex items-center gap-3">

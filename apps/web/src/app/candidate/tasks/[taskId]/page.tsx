@@ -6,6 +6,7 @@ import { CodeEditor } from '@/components/sandbox/CodeEditor';
 import { OutputPanel } from '@/components/sandbox/OutputPanel';
 import { TaskHeader } from '@/components/sandbox/TaskHeader';
 import { HintPanel } from '@/components/sandbox/HintPanel';
+import { TaskHelpChat } from '@/components/sandbox/TaskHelpChat';
 import { RadarChartMini } from '@/components/passport/RadarChart';
 import { LanguageSelector } from '@/components/sandbox/LanguageSelector';
 import { ProctoringModal } from '@/components/proctoring/ProctoringModal';
@@ -135,8 +136,10 @@ export default function SandboxPage() {
     sessionId,
   });
 
-  // AI intervention hook
-  const { intervention, acknowledgeHint } = useSessionIntervention(sessionId);
+  // AI intervention hook with contextual hints
+  const { intervention, acknowledgeHint, requestContextualHint } = useSessionIntervention(sessionId);
+  const [hintContext, setHintContext] = useState<{ attempts?: number; repeated_errors?: boolean; code_history_length?: number } | undefined>();
+  const [isRequestingHint, setIsRequestingHint] = useState(false);
 
   // Radar profile hook (polling every 10 seconds)
   const { radarProfile } = useRadar(undefined, { pollInterval: 10000 });
@@ -230,7 +233,27 @@ export default function SandboxPage() {
       trackHintAcknowledged(intervention.hint_category);
     }
     acknowledgeHint();
+    setHintContext(undefined);
   }, [intervention?.hint_category, trackHintAcknowledged, acknowledgeHint]);
+
+  const handleRequestHint = useCallback(async () => {
+    if (!taskId || isRequestingHint) return;
+    
+    setIsRequestingHint(true);
+    try {
+      const response = await requestContextualHint(
+        taskId,
+        code,
+        result?.stderr || null,
+      );
+      if (response) {
+        setHintContext(response.context);
+        trackHintDisplayed('contextual');
+      }
+    } finally {
+      setIsRequestingHint(false);
+    }
+  }, [taskId, code, result?.stderr, requestContextualHint, trackHintDisplayed, isRequestingHint]);
 
   // Show proctoring modal for proctored tasks
   if (isProctored && !proctoringSessionId) {
@@ -291,13 +314,33 @@ export default function SandboxPage() {
       <TaskHeader task={task} />
 
       {/* AI Hint Panel */}
-      {intervention?.hint && (
+      {intervention?.hint ? (
         <div className="mt-2">
           <HintPanel
             intervention={intervention}
             onAcknowledge={handleAcknowledgeHint}
             onDismiss={handleAcknowledgeHint}
+            context={hintContext}
           />
+        </div>
+      ) : (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={handleRequestHint}
+            disabled={isRequestingHint}
+            className="px-3 py-1.5 text-sm bg-yellow-600/20 text-yellow-400 border border-yellow-600/30 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 transition-colors flex items-center gap-2"
+            title="Request an AI-powered hint based on your code history"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+              />
+            </svg>
+            {isRequestingHint ? 'Getting Hint...' : 'Need a Hint?'}
+          </button>
         </div>
       )}
 
@@ -373,6 +416,14 @@ export default function SandboxPage() {
           </div>
         </div>
       </div>
+
+      {/* Task Help Chat (Feature 3) */}
+      <TaskHelpChat
+        sessionId={sessionId}
+        taskId={taskId}
+        currentCode={code}
+        currentError={result?.stderr}
+      />
     </div>
   );
 }

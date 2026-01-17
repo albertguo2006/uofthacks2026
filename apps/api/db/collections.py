@@ -41,3 +41,11 @@ class Collections:
     @staticmethod
     def proctoring_sessions():
         return get_db().proctoring_sessions
+
+    @staticmethod
+    def chat_messages():
+        return get_db().chat_messages
+
+    @staticmethod
+    def db():
+        return get_db()

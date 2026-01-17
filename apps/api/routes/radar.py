@@ -5,16 +5,20 @@ Provides endpoints for:
 - Fetching user's Engineering DNA radar profile
 - Getting pending AI interventions (hints)
 - Acknowledging hints
+- Contextual hints based on code history (Feature 1)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from bson import ObjectId
 
 from middleware.auth import get_current_user
 from db.collections import Collections
 from services.ai_worker import acknowledge_intervention, track_intervention_effectiveness
+from services.backboard import BackboardService
+from services.amplitude import forward_to_amplitude
 
 router = APIRouter()
 
@@ -210,3 +214,121 @@ async def get_session_intervention(
             "models_used": ai_context.get("models_used", []),
         }
     }
+
+
+# =========================================================================
+# CONTEXTUAL HINTS - Enhanced with code history (Feature 1)
+# =========================================================================
+
+
+class ContextualHintRequest(BaseModel):
+    session_id: str
+    task_id: str
+    current_code: str
+    current_error: Optional[str] = None
+
+
+class ContextualHintResponse(BaseModel):
+    hint: str
+    context: dict
+    hint_id: str
+
+
+@router.post("/session/hints", response_model=ContextualHintResponse)
+async def request_contextual_hint(
+    request: ContextualHintRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Request a contextual hint based on the user's code history in the current session.
+    Uses Backboard's Claude model for empathetic, pedagogical hints.
+    """
+    # Get session with code history
+    session = await Collections.sessions().find_one({"session_id": request.session_id})
+    
+    if not session:
+        # Create session if it doesn't exist
+        session = {
+            "session_id": request.session_id,
+            "user_id": current_user["user_id"],
+            "task_id": request.task_id,
+            "code_history": [],
+            "started_at": datetime.utcnow(),
+        }
+        await Collections.sessions().insert_one(session)
+    
+    if session.get("user_id") != current_user["user_id"]:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to access this session"
+        )
+    
+    # Get task description
+    task = await Collections.tasks().find_one({"task_id": request.task_id})
+    task_description = task.get("description", "Unknown task") if task else "Unknown task"
+    
+    # Get code history from session
+    code_history = session.get("code_history", [])
+    
+    # Generate contextual hint using Backboard
+    backboard = BackboardService(current_user["user_id"])
+    hint_result = await backboard.generate_contextual_hint(
+        code_history=code_history,
+        current_code=request.current_code,
+        current_error=request.current_error,
+        task_description=task_description,
+        session_id=request.session_id,
+    )
+    
+    # Store hint for tracking
+    hint_id = str(ObjectId())
+    await Collections.interventions().insert_one({
+        "_id": hint_id,
+        "session_id": request.session_id,
+        "user_id": current_user["user_id"],
+        "task_id": request.task_id,
+        "triggered_at": datetime.utcnow(),
+        "trigger_reason": "user_requested",
+        "intervention_type": "contextual_hint",
+        "hint_text": hint_result["hint"],
+        "hint_context": hint_result["context"],
+        "acknowledged": False,
+    })
+    
+    # Track to Amplitude
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": current_user["user_id"],
+        "session_id": request.session_id,
+        "task_id": request.task_id,
+        "event_type": "contextual_hint_shown",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "hint_category": "contextual",
+            "code_history_length": len(code_history),
+            "has_error": bool(request.current_error),
+        },
+        "forwarded_to_amplitude": False,
+    }
+    await Collections.events().insert_one(event_doc)
+    
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=current_user["user_id"],
+        event_type="contextual_hint_shown",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "session_id": request.session_id,
+            "task_id": request.task_id,
+            "hint_category": "contextual",
+            "code_history_length": len(code_history),
+        },
+    )
+    
+    return ContextualHintResponse(
+        hint=hint_result["hint"],
+        context=hint_result["context"],
+        hint_id=hint_id,
+    )

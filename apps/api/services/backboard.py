@@ -409,3 +409,321 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                 )
         except Exception:
             pass
+
+    # =========================================================================
+    # CONTEXTUAL HINTS - Enhanced with code history (Feature 1)
+    # =========================================================================
+
+    async def generate_contextual_hint(
+        self,
+        code_history: list,
+        current_code: str,
+        current_error: str,
+        task_description: str,
+        session_id: str,
+    ) -> dict:
+        """
+        Generate smarter hints based on the user's code history within the session.
+        Uses Claude for empathetic delivery with full context awareness.
+        
+        Args:
+            code_history: List of {code, timestamp, error} entries from this session
+            current_code: The current state of the code
+            current_error: The current error message (if any)
+            task_description: The task the user is working on
+            session_id: For session-scoped memory
+        """
+        # Build code evolution summary
+        evolution_summary = []
+        for i, entry in enumerate(code_history[-5:]):  # Last 5 snapshots
+            error_info = f" (Error: {entry.get('error', 'none')[:50]})" if entry.get('error') else ""
+            evolution_summary.append(f"Attempt {i+1}: {len(entry.get('code', ''))} chars{error_info}")
+        
+        evolution_text = "\n".join(evolution_summary) if evolution_summary else "First attempt"
+        
+        # Identify patterns in errors
+        error_patterns = []
+        for entry in code_history:
+            if entry.get('error'):
+                error_patterns.append(entry['error'][:100])
+        
+        repeated_errors = len(error_patterns) != len(set(error_patterns))
+        
+        response = await self._call_model(
+            model="anthropic/claude-3-haiku-20240307",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are an encouraging coding mentor with full context of the student's session.
+
+Rules:
+- Give a brief, helpful hint (2-3 sentences max)
+- Don't give away the answer
+- Reference their progress if they've been improving
+- If they keep making the same error, suggest a different approach
+- Be encouraging and acknowledge their persistence
+- Use your memory to avoid repeating hints you've already given""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Task: {task_description[:500]}
+
+Code evolution in this session:
+{evolution_text}
+
+Current code:
+```
+{current_code[:1500]}
+```
+
+Current error: {current_error or 'No specific error, but tests failing'}
+
+Has repeated same error: {repeated_errors}
+Total attempts this session: {len(code_history) + 1}
+
+Please provide a contextual hint based on their journey so far.""",
+                },
+            ],
+            memory_key=f"session:{session_id}:hints",
+            temperature=0.8,
+            max_tokens=200,
+        )
+        
+        return {
+            "hint": response,
+            "context": {
+                "attempts": len(code_history) + 1,
+                "repeated_errors": repeated_errors,
+                "code_history_length": len(code_history),
+            },
+        }
+
+    # =========================================================================
+    # HIRING SELECTION - AI-ranked candidates (Feature 2)
+    # =========================================================================
+
+    async def rank_candidates(
+        self,
+        candidates: list,
+        job_requirements: dict,
+        amplitude_data: dict = None,
+    ) -> list:
+        """
+        Rank candidates for a job using GPT-4o for structured analysis.
+        
+        Args:
+            candidates: List of candidate dicts with radar_profile, sessions_completed, etc.
+            job_requirements: Job's target_radar and requirements
+            amplitude_data: Optional per-user analytics from Amplitude
+        
+        Returns:
+            List of candidates with AI scores and explanations
+        """
+        # Prepare candidate summaries for the model
+        candidate_summaries = []
+        for c in candidates[:20]:  # Limit to 20 candidates per request
+            summary = {
+                "id": c.get("user_id") or c.get("_id"),
+                "radar": c.get("radar_profile", {}),
+                "sessions": c.get("sessions_completed", 0),
+                "archetype": c.get("archetype"),
+                "integrity": c.get("integrity_score", 0.5),
+            }
+            # Add Amplitude data if available
+            if amplitude_data and summary["id"] in amplitude_data:
+                user_amp = amplitude_data[summary["id"]]
+                summary["activity_score"] = user_amp.get("activity_score", 0)
+                summary["engagement_trend"] = user_amp.get("trend", "stable")
+            candidate_summaries.append(summary)
+        
+        response = await self._call_model(
+            model="openai/gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are an AI hiring assistant. Rank candidates based on job fit.
+
+Return valid JSON array only:
+[
+  {
+    "id": "candidate_id",
+    "score": 0.0-1.0,
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1"],
+    "recommendation": "brief 1-sentence recommendation"
+  }
+]
+
+Score based on:
+- Radar profile alignment with job requirements (50%)
+- Session completion and engagement (20%)
+- Integrity score (15%)
+- Archetype fit (15%)""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Job Requirements:
+{json.dumps(job_requirements, indent=2)}
+
+Candidates to rank:
+{json.dumps(candidate_summaries, indent=2)}
+
+Rank all candidates from best to worst fit.""",
+                },
+            ],
+            temperature=0.3,
+            max_tokens=1500,
+        )
+        
+        try:
+            rankings = json.loads(response)
+            # Merge rankings back with original candidate data
+            ranking_map = {r["id"]: r for r in rankings}
+            for c in candidates:
+                cid = c.get("user_id") or c.get("_id")
+                if cid in ranking_map:
+                    c["ai_score"] = ranking_map[cid].get("score", 0.5)
+                    c["ai_strengths"] = ranking_map[cid].get("strengths", [])
+                    c["ai_gaps"] = ranking_map[cid].get("gaps", [])
+                    c["ai_recommendation"] = ranking_map[cid].get("recommendation", "")
+                else:
+                    c["ai_score"] = 0.5
+                    c["ai_strengths"] = []
+                    c["ai_gaps"] = []
+                    c["ai_recommendation"] = "Unable to analyze"
+            
+            # Sort by AI score
+            candidates.sort(key=lambda x: x.get("ai_score", 0), reverse=True)
+            return candidates
+            
+        except json.JSONDecodeError:
+            # Return candidates with default scores
+            for c in candidates:
+                c["ai_score"] = 0.5
+                c["ai_recommendation"] = "Analysis unavailable"
+            return candidates
+
+    async def explain_candidate_fit(
+        self,
+        candidate: dict,
+        job: dict,
+        amplitude_data: dict = None,
+    ) -> dict:
+        """
+        Generate detailed AI analysis for a specific candidate-job match.
+        """
+        response = await self._call_model(
+            model="openai/gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Provide a detailed hiring analysis. Return valid JSON:
+{
+  "overall_score": 0.0-1.0,
+  "summary": "2-3 sentence overall assessment",
+  "dimension_analysis": {
+    "verification": {"score": 0.0-1.0, "note": "brief note"},
+    "velocity": {"score": 0.0-1.0, "note": "brief note"},
+    "optimization": {"score": 0.0-1.0, "note": "brief note"},
+    "decomposition": {"score": 0.0-1.0, "note": "brief note"},
+    "debugging": {"score": 0.0-1.0, "note": "brief note"}
+  },
+  "key_strengths": ["strength1", "strength2", "strength3"],
+  "areas_of_concern": ["concern1"],
+  "interview_focus_areas": ["topic1", "topic2"],
+  "hiring_recommendation": "strong_hire|hire|maybe|no_hire"
+}""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""Candidate Profile:
+- Radar: {json.dumps(candidate.get('radar_profile', {}), indent=2)}
+- Archetype: {candidate.get('archetype', 'unknown')}
+- Sessions Completed: {candidate.get('sessions_completed', 0)}
+- Integrity Score: {candidate.get('integrity_score', 'N/A')}
+- Activity Data: {json.dumps(amplitude_data or {}, indent=2)}
+
+Job Requirements:
+- Target Radar: {json.dumps(job.get('target_radar', {}), indent=2)}
+- Role: {job.get('title', 'Unknown')}
+- Description: {job.get('description', 'N/A')[:500]}
+
+Provide a comprehensive hiring analysis.""",
+                },
+            ],
+            temperature=0.4,
+            max_tokens=800,
+        )
+        
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            return {
+                "overall_score": 0.5,
+                "summary": response[:200] if response else "Analysis unavailable",
+                "hiring_recommendation": "maybe",
+            }
+
+    # =========================================================================
+    # TASK HELP CHAT - Gemini-powered (Feature 3)
+    # =========================================================================
+
+    async def task_help_chat(
+        self,
+        task: dict,
+        current_code: str,
+        question: str,
+        session_id: str,
+        error_context: str = None,
+    ) -> str:
+        """
+        Interactive task help using Gemini for natural conversation.
+        Memory enabled for conversation history within the session.
+        
+        Args:
+            task: Task details (title, description, test_cases)
+            current_code: User's current code
+            question: User's question
+            session_id: For conversation memory
+            error_context: Optional current error
+        """
+        task_context = f"""Task: {task.get('title', 'Unknown')}
+Description: {task.get('description', 'N/A')[:800]}
+Difficulty: {task.get('difficulty', 'unknown')}"""
+
+        code_context = f"""Current Code:
+```
+{current_code[:1500]}
+```"""
+
+        error_info = f"\nCurrent Error: {error_context}" if error_context else ""
+
+        return await self._call_model(
+            model="google/gemini-1.5-flash",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a helpful coding assistant for a coding assessment platform.
+
+Rules:
+- Help the user understand concepts and debug issues
+- Don't give away complete solutions
+- Guide them toward the answer with questions and hints
+- Be concise but thorough (2-4 sentences typically)
+- Remember the conversation context
+- If they ask unrelated questions, redirect to the task
+- You can explain concepts, syntax, and debugging strategies""",
+                },
+                {
+                    "role": "user",
+                    "content": f"""{task_context}
+
+{code_context}{error_info}
+
+User's question: {question}""",
+                },
+            ],
+            memory_key=f"session:{session_id}:chat",
+            temperature=0.7,
+            max_tokens=400,
+        )

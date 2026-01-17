@@ -248,6 +248,38 @@ async def run_code(
         },
     )
 
+    # Store code snapshot in session for contextual hints (Feature 1)
+    code_snapshot = {
+        "code": submission.code,
+        "timestamp": datetime.utcnow(),
+        "error": stderr_all[:500] if stderr_all else None,
+        "passed": all_passed,
+        "tests_passed": tests_passed,
+        "tests_total": tests_total,
+    }
+    
+    await Collections.sessions().update_one(
+        {"session_id": submission.session_id},
+        {
+            "$push": {
+                "code_history": {
+                    "$each": [code_snapshot],
+                    "$slice": -20,  # Keep last 20 snapshots
+                }
+            },
+            "$set": {
+                "current_code_snapshot": submission.code,
+                "last_run_at": datetime.utcnow(),
+            },
+            "$setOnInsert": {
+                "user_id": current_user["user_id"],
+                "task_id": task_id,
+                "started_at": datetime.utcnow(),
+            },
+        },
+        upsert=True,
+    )
+
     return RunResult(
         success=True,
         results=results,

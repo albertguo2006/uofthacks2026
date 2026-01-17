@@ -178,10 +178,49 @@ export function useSessionIntervention(sessionId: string | null) {
     }
   }, [sessionId]);
 
+  const requestContextualHint = useCallback(async (
+    taskId: string,
+    currentCode: string,
+    currentError?: string | null,
+  ) => {
+    if (!sessionId) return null;
+
+    try {
+      const response = await api.post<{
+        hint: string;
+        context: {
+          attempts: number;
+          repeated_errors: boolean;
+          code_history_length: number;
+        };
+        hint_id: string;
+      }>('/radar/session/hints', {
+        session_id: sessionId,
+        task_id: taskId,
+        current_code: currentCode,
+        current_error: currentError || null,
+      });
+      
+      // Update local intervention state with the new hint
+      setIntervention({
+        hint: response.hint,
+        hint_category: 'contextual',
+        intervention_type: 'user_requested',
+        session_id: sessionId,
+      });
+      
+      return response;
+    } catch (err) {
+      console.error('Failed to request contextual hint:', err);
+      return null;
+    }
+  }, [sessionId]);
+
   return {
     intervention,
     isLoading,
     acknowledgeHint,
     refetch: fetchIntervention,
+    requestContextualHint,
   };
 }
