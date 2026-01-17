@@ -2,7 +2,7 @@
 
 import { Passport } from '@/types/passport';
 import { ArchetypeBadge } from './ArchetypeBadge';
-import { SkillVector } from './SkillVector';
+import { SkillPentagon } from './SkillPentagon';
 import { EvidenceList } from './EvidenceList';
 import { RadarChartWithLegend } from './RadarChart';
 import { useRadar } from '@/hooks/useRadar';
@@ -69,7 +69,17 @@ export function SkillPassport({ passport, compact = false }: SkillPassportProps)
         </div>
       </div>
 
-      {/* Engineering DNA Radar */}
+      {/* Skill Pentagon Visualization */}
+      {passport.metrics && (
+        <div>
+          <h3 className="font-semibold mb-3">Skill Profile</h3>
+          <div className="flex flex-col items-center">
+            <SkillPentagon metrics={passport.metrics} size={280} />
+          </div>
+        </div>
+      )}
+
+      {/* Engineering DNA Radar (only show if API data available) */}
       {radarProfile && (
         <div>
           <h3 className="font-semibold mb-3">Engineering DNA</h3>
@@ -82,14 +92,6 @@ export function SkillPassport({ passport, compact = false }: SkillPassportProps)
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Skill Vector Visualization (Legacy) */}
-      {passport.metrics && (
-        <div>
-          <h3 className="font-semibold mb-3">Skill Profile</h3>
-          <SkillVector metrics={passport.metrics} />
         </div>
       )}
 
