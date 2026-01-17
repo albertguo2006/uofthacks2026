@@ -1,3 +1,5 @@
+import type { Timeline, AskRequest, AskResponse, QuickInsightsResponse, UserSessionsResponse } from '@/types/timeline';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Helper to check if we're in dev mode (from URL query param)
@@ -244,6 +246,45 @@ class ApiClient {
     }
     return this.get('/analytics/events/counts');
   }
+
+  // Replay API methods
+  async getSessionTimeline(sessionId: string): Promise<Timeline> {
+    if (isDevMode()) {
+      return MOCK_TIMELINE as Timeline;
+    }
+    return this.get(`/replay/${sessionId}/timeline`);
+  }
+
+  async askAboutSession(sessionId: string, request: AskRequest): Promise<AskResponse> {
+    if (isDevMode()) {
+      return {
+        answer: `Based on the session timeline, the candidate changed their approach at approximately 10 minutes into the session [idx: 5]. After encountering a TypeError, they received an AI hint suggesting the use of a hash map, and then rewrote their solution to use a dictionary-based approach. This resulted in all tests passing.`,
+        timeline_jumps: [
+          { index: 5, timestamp: MOCK_TIMELINE.entries[5].timestamp, description: 'Code edited - major refactor' },
+          { index: 4, timestamp: MOCK_TIMELINE.entries[4].timestamp, description: 'AI Intervention' },
+        ],
+        video_segments: [
+          { start_time: 580, end_time: 650, confidence: 0.92, description: 'Discussing new approach' },
+        ],
+        confidence: 0.85,
+      };
+    }
+    return this.post(`/replay/${sessionId}/ask`, request);
+  }
+
+  async getSessionInsights(sessionId: string): Promise<QuickInsightsResponse> {
+    if (isDevMode()) {
+      return MOCK_INSIGHTS as QuickInsightsResponse;
+    }
+    return this.get(`/replay/${sessionId}/insights`);
+  }
+
+  async getUserSessions(userId: string): Promise<UserSessionsResponse> {
+    if (isDevMode()) {
+      return { sessions: MOCK_SESSIONS };
+    }
+    return this.get(`/replay/user/${userId}/sessions`);
+  }
 }
 
 // Analytics types
@@ -330,6 +371,181 @@ const MOCK_EVENT_COUNTS: Record<string, number> = {
   run_attempted: 45,
   error_emitted: 23,
   fix_applied: 21,
+};
+
+// Mock session data for dev mode replay
+const MOCK_SESSIONS = [
+  {
+    session_id: 'dev-session-001',
+    task_id: 'task-001',
+    task_title: 'Two Sum',
+    started_at: new Date(Date.now() - 3600000).toISOString(),
+    ended_at: new Date(Date.now() - 1800000).toISOString(),
+    event_count: 45,
+    code_snapshots: 12,
+    has_video: true,
+    video_id: 'video-001',
+  },
+  {
+    session_id: 'dev-session-002',
+    task_id: 'task-002',
+    task_title: 'Binary Search',
+    started_at: new Date(Date.now() - 7200000).toISOString(),
+    ended_at: new Date(Date.now() - 5400000).toISOString(),
+    event_count: 32,
+    code_snapshots: 8,
+    has_video: false,
+    video_id: null,
+  },
+];
+
+const MOCK_TIMELINE = {
+  session_id: 'dev-session-001',
+  user_id: 'dev-candidate-123',
+  task_id: 'task-001',
+  task_title: 'Two Sum',
+  start_time: new Date(Date.now() - 3600000).toISOString(),
+  end_time: new Date(Date.now() - 1800000).toISOString(),
+  duration_seconds: 1800,
+  entries: [
+    {
+      id: '1',
+      timestamp: new Date(Date.now() - 3600000).toISOString(),
+      type: 'session_started',
+      code_snapshot: null,
+      code_diff: null,
+      event_data: null,
+      video_timestamp_seconds: 0,
+      intervention: null,
+      label: 'Session started',
+      severity: 'info',
+    },
+    {
+      id: '2',
+      timestamp: new Date(Date.now() - 3500000).toISOString(),
+      type: 'code_changed',
+      code_snapshot: 'def two_sum(nums, target):\n    pass',
+      code_diff: null,
+      event_data: { lines_changed: 2 },
+      video_timestamp_seconds: 100,
+      intervention: null,
+      label: 'Code edited',
+      severity: 'info',
+    },
+    {
+      id: '3',
+      timestamp: new Date(Date.now() - 3400000).toISOString(),
+      type: 'run_attempted',
+      code_snapshot: 'def two_sum(nums, target):\n    for i in range(len(nums)):\n        pass',
+      code_diff: '@@ -1,2 +1,3 @@\n def two_sum(nums, target):\n-    pass\n+    for i in range(len(nums)):\n+        pass',
+      event_data: { result: 'error' },
+      video_timestamp_seconds: 200,
+      intervention: null,
+      label: 'Run attempted',
+      severity: 'warning',
+    },
+    {
+      id: '4',
+      timestamp: new Date(Date.now() - 3300000).toISOString(),
+      type: 'error_emitted',
+      code_snapshot: null,
+      code_diff: null,
+      event_data: { error_type: 'TypeError' },
+      video_timestamp_seconds: 300,
+      intervention: null,
+      label: 'Error: TypeError',
+      severity: 'error',
+    },
+    {
+      id: '5',
+      timestamp: new Date(Date.now() - 3200000).toISOString(),
+      type: 'ai_intervention',
+      code_snapshot: null,
+      code_diff: null,
+      event_data: null,
+      video_timestamp_seconds: 400,
+      intervention: {
+        hint: 'Consider using a hash map to store previously seen numbers and their indices.',
+        type: 'technical_hint',
+        personalization_badge: 'Based on your coding patterns',
+      },
+      label: 'AI Intervention',
+      severity: 'warning',
+    },
+    {
+      id: '6',
+      timestamp: new Date(Date.now() - 3000000).toISOString(),
+      type: 'code_changed',
+      code_snapshot: 'def two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i',
+      code_diff: '@@ -1,3 +1,7 @@\n def two_sum(nums, target):\n-    for i in range(len(nums)):\n-        pass\n+    seen = {}\n+    for i, num in enumerate(nums):\n+        complement = target - num\n+        if complement in seen:\n+            return [seen[complement], i]\n+        seen[num] = i',
+      event_data: { lines_changed: 7 },
+      video_timestamp_seconds: 600,
+      intervention: null,
+      label: 'Code edited',
+      severity: 'info',
+    },
+    {
+      id: '7',
+      timestamp: new Date(Date.now() - 2800000).toISOString(),
+      type: 'test_passed',
+      code_snapshot: null,
+      code_diff: null,
+      event_data: { tests_passed: 3, tests_total: 3 },
+      video_timestamp_seconds: 800,
+      intervention: null,
+      label: 'Test passed',
+      severity: 'success',
+    },
+    {
+      id: '8',
+      timestamp: new Date(Date.now() - 2700000).toISOString(),
+      type: 'submission_passed',
+      code_snapshot: null,
+      code_diff: null,
+      event_data: { tests_passed: 10, tests_total: 10 },
+      video_timestamp_seconds: 900,
+      intervention: null,
+      label: 'All tests passed',
+      severity: 'success',
+    },
+  ],
+  has_video: true,
+  video_id: 'video-001',
+  video_url: null,
+  video_start_offset_seconds: 0,
+  total_runs: 4,
+  total_submissions: 1,
+  errors_encountered: 1,
+  interventions_received: 1,
+  final_result: 'passed',
+};
+
+const MOCK_INSIGHTS = {
+  session_id: 'dev-session-001',
+  insights: [
+    {
+      category: 'approach_change',
+      title: 'Approach Change Detected',
+      description: 'After encountering an error, the candidate switched from brute force to hash map approach (~7 lines changed)',
+      timeline_index: 5,
+      video_timestamp: 600,
+    },
+    {
+      category: 'debugging_efficiency',
+      title: 'Debugging Efficiency: High',
+      description: 'Average time to recover from errors: ~300s',
+      timeline_index: null,
+      video_timestamp: null,
+    },
+    {
+      category: 'testing_habit',
+      title: 'Testing Style: Iterative',
+      description: 'Ran code 4 times (1.3 runs/minute)',
+      timeline_index: null,
+      video_timestamp: null,
+    },
+  ],
+  summary: 'The candidate demonstrated strong problem-solving skills, efficiently pivoting from a brute force approach to an optimized hash map solution after receiving a hint. They showed good debugging practices and completed the task successfully.',
 };
 
 export const api = new ApiClient();

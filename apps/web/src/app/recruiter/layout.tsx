@@ -22,7 +22,7 @@ export default function RecruiterLayout({
             <div className="flex justify-between h-16">
               <div className="flex items-center space-x-8">
                 <Link href={`/recruiter${devSuffix}`} className="font-bold text-lg">
-                  Proof of Skill <span className="text-sm text-gray-500">Recruiter</span>
+                  Simply Authentic <span className="text-sm text-gray-500">Recruiter</span>
                 </Link>
                 <Link
                   href={`/recruiter/candidates${devSuffix}`}

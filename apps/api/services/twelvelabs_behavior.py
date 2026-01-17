@@ -20,7 +20,7 @@ from models.behavioral_analysis import (
     BehaviorQuery
 )
 from utils.behavioral_helpers import BehavioralAnalysisHelper
-from config.behavioral_config import get_behavioral_config
+from behavioral_config.behavioral_config import get_behavioral_config
 from db.collections import Collections
 
 

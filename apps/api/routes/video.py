@@ -18,9 +18,14 @@ UPLOAD_DIR = "/tmp/video_uploads"
 async def upload_video(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    session_id: str = Query(None, description="Optional session ID to link video for replay sync"),
     current_user: dict = Depends(get_current_user),
 ):
-    """Upload an interview video for processing."""
+    """Upload an interview video for processing.
+
+    Optionally link to a coding session by providing session_id for
+    timeline synchronization in the replay feature.
+    """
     # Validate file type
     allowed_types = ["video/mp4", "video/webm", "video/quicktime"]
     if file.content_type not in allowed_types:
@@ -45,6 +50,7 @@ async def upload_video(
     video_doc = {
         "_id": video_id,
         "user_id": current_user["user_id"],
+        "session_id": session_id,  # Link to coding session for replay
         "status": "uploading",
         "filename": file.filename,
         "file_path": file_path,
