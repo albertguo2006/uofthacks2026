@@ -16,6 +16,16 @@ from config import get_settings
 BACKBOARD_BASE_URL = "https://api.backboard.io/v1"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
+# ANSI color codes for terminal output
+CYAN = "\033[96m"
+MAGENTA = "\033[95m"
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+DIM = "\033[2m"
+
 
 class BackboardService:
     """
@@ -43,7 +53,29 @@ class BackboardService:
         Generic model call with optional memory.
         Memory is keyed per-user to enable personalization.
         """
+        # Extract model short name for logging
+        model_short = model.split("/")[-1] if "/" in model else model
+        
+        # Log the prompt
+        print(f"\n{CYAN}╭─────────────────────────────────────────────────────────────╮{RESET}")
+        print(f"{CYAN}│ [Backboard] Calling {model_short}{RESET}")
+        print(f"{CYAN}├─────────────────────────────────────────────────────────────┤{RESET}")
+        
+        if memory_key:
+            print(f"{CYAN}│ Memory Key: {self.user_id[:8]}...:{memory_key}{RESET}")
+        
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")[:200]  # Truncate for readability
+            if role == "system":
+                print(f"{MAGENTA}│ [system] {content}...{RESET}" if len(msg.get("content", "")) > 200 else f"{MAGENTA}│ [system] {content}{RESET}")
+            else:
+                print(f"{BLUE}│ [user] {content}...{RESET}" if len(msg.get("content", "")) > 200 else f"{BLUE}│ [user] {content}{RESET}")
+        
+        print(f"{CYAN}╰─────────────────────────────────────────────────────────────╯{RESET}")
+        
         if not self.api_key:
+            print(f"{YELLOW}[Backboard] Skipped - API key not configured, using fallback{RESET}")
             return self._fallback_response(messages)
 
         try:
@@ -71,10 +103,15 @@ class BackboardService:
                     json=payload,
                 )
                 response.raise_for_status()
-                return response.json()["choices"][0]["message"]["content"]
+                result = response.json()["choices"][0]["message"]["content"]
+                
+                print(f"{GREEN}[Backboard] ✓ {model_short} responded ({len(result)} chars){RESET}")
+                print(f"{DIM}[Backboard] Response: {result[:150]}...{RESET}" if len(result) > 150 else f"{DIM}[Backboard] Response: {result}{RESET}")
+                
+                return result
 
         except Exception as e:
-            print(f"Backboard API error: {e}")
+            print(f"{RED}[Backboard] ✗ Error calling {model_short}: {e}{RESET}")
             return self._fallback_response(messages)
 
     def _fallback_response(self, messages: list) -> str:
@@ -106,7 +143,23 @@ class BackboardService:
         Direct call to Gemini API (gemini-2.0-flash).
         Supports conversation history via session_key.
         """
+        # Log the prompt
+        print(f"\n{MAGENTA}╭─────────────────────────────────────────────────────────────╮{RESET}")
+        print(f"{MAGENTA}│ [Gemini] Direct API Call (gemini-2.5-flash){RESET}")
+        print(f"{MAGENTA}├─────────────────────────────────────────────────────────────┤{RESET}")
+        
+        if session_key:
+            history_len = len(self._gemini_history.get(session_key, []))
+            print(f"{MAGENTA}│ Session: {session_key[:20]}... (history: {history_len} msgs){RESET}")
+        
+        if system_instruction:
+            print(f"{BLUE}│ [system] {system_instruction[:150]}...{RESET}" if len(system_instruction) > 150 else f"{BLUE}│ [system] {system_instruction}{RESET}")
+        
+        print(f"{CYAN}│ [user] {prompt[:200]}...{RESET}" if len(prompt) > 200 else f"{CYAN}│ [user] {prompt}{RESET}")
+        print(f"{MAGENTA}╰─────────────────────────────────────────────────────────────╯{RESET}")
+        
         if not self.gemini_api_key:
+            print(f"{YELLOW}[Gemini] Skipped - API key not configured, using fallback{RESET}")
             return self._fallback_response([{"content": prompt}])
 
         try:
@@ -147,6 +200,9 @@ class BackboardService:
                 result = response.json()
                 response_text = result["candidates"][0]["content"]["parts"][0]["text"]
                 
+                print(f"{GREEN}[Gemini] ✓ Response received ({len(response_text)} chars){RESET}")
+                print(f"{DIM}[Gemini] Response: {response_text[:150]}...{RESET}" if len(response_text) > 150 else f"{DIM}[Gemini] Response: {response_text}{RESET}")
+                
                 # Store conversation history if session_key provided
                 if session_key:
                     if session_key not in self._gemini_history:
@@ -169,7 +225,7 @@ class BackboardService:
                 return response_text
 
         except Exception as e:
-            print(f"Gemini API error: {e}")
+            print(f"{RED}[Gemini] ✗ Error: {e}{RESET}")
             return self._fallback_response([{"content": prompt}])
 
     def clear_gemini_history(self, session_key: str):
@@ -186,6 +242,7 @@ class BackboardService:
         Use Claude for empathetic, pedagogical hints.
         Memory: Remembers past hints to avoid repetition.
         """
+        print(f"\n{CYAN}[Hint] Generating basic hint (attempt #{attempt_count}){RESET}")
         return await self._call_model(
             model="anthropic/claude-3-haiku-20240307",
             messages=[
@@ -260,6 +317,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint.""",
             }
         """
         dominant_category = error_profile.get("dominant_category", "logic")
+        print(f"\n{MAGENTA}[Hint] Generating PERSONALIZED hint (attempt #{attempt_count}, profile: {dominant_category}){RESET}")
         effective_styles = error_profile.get("effective_hint_styles", ["conceptual"])
         hint_style = effective_styles[0] if effective_styles else "conceptual"
 
@@ -562,6 +620,8 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
         error_streak = session_context.get("error_streak", 0)
         time_stuck_ms = session_context.get("time_stuck_ms", 0)
         attempt_count = session_context.get("attempt_count", 1)
+        
+        print(f"\n{BLUE}[Intervention] Evaluating... (errors: {error_streak}, stuck: {time_stuck_ms // 1000}s){RESET}")
 
         # Use personalized hints if error profile is available
         use_personalized = error_profile and error_profile.get("has_data", False)
@@ -711,6 +771,8 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
             task_description: The task the user is working on
             session_id: For session-scoped memory
         """
+        print(f"\n{CYAN}[Hint] Generating CONTEXTUAL hint (history: {len(code_history)} snapshots, session: {session_id[:12]}...){RESET}")
+        
         # Build code evolution summary
         evolution_summary = []
         for i, entry in enumerate(code_history[-5:]):  # Last 5 snapshots
