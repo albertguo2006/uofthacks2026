@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from functools import lru_cache
 
 
@@ -29,8 +30,8 @@ class Settings(BaseSettings):
     # Backboard.io (Multi-model AI)
     backboard_api_key: str = ""
 
-    # Gemini API (direct)
-    gemini_api_key: str = ""
+    # Gemini API (direct) - reads from GOOGLE_API_KEY env var
+    gemini_api_key: str = Field(default="", validation_alias="GOOGLE_API_KEY")
 
     # AI Intervention Settings
     ai_hint_enabled: bool = True
