@@ -3,6 +3,13 @@ import json
 from config import get_settings
 from db.collections import Collections
 
+# ANSI color codes for terminal output
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+
 
 async def forward_to_amplitude(
     event_id: str,
@@ -17,6 +24,7 @@ async def forward_to_amplitude(
 
     if not settings.amplitude_api_key:
         # Amplitude not configured, mark as forwarded anyway
+        print(f"{YELLOW}[Amplitude] Skipped '{event_type}' - API key not configured{RESET}")
         await Collections.events().update_one(
             {"_id": event_id},
             {"$set": {"forwarded_to_amplitude": True}},
@@ -33,6 +41,8 @@ async def forward_to_amplitude(
     if user_properties:
         amplitude_event["user_properties"] = {"$set": user_properties}
 
+    print(f"{BLUE}[Amplitude] Sending '{event_type}' for user {user_id[:8]}...{RESET}")
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -46,13 +56,18 @@ async def forward_to_amplitude(
 
             success = response.status_code == 200
 
+            if success:
+                print(f"{GREEN}[Amplitude] ✓ Sent '{event_type}' successfully{RESET}")
+            else:
+                print(f"{RED}[Amplitude] ✗ Failed '{event_type}' - HTTP {response.status_code}: {response.text[:100]}{RESET}")
+
             await Collections.events().update_one(
                 {"_id": event_id},
                 {"$set": {"forwarded_to_amplitude": success}},
             )
 
     except Exception as e:
-        print(f"Failed to forward event to Amplitude: {e}")
+        print(f"{RED}[Amplitude] ✗ Error sending '{event_type}': {e}{RESET}")
         await Collections.events().update_one(
             {"_id": event_id},
             {"$set": {"forwarded_to_amplitude": False}},
@@ -64,11 +79,14 @@ async def update_amplitude_user_properties(user_id: str, properties: dict):
     settings = get_settings()
 
     if not settings.amplitude_api_key:
+        print(f"{YELLOW}[Amplitude] Skipped user properties update - API key not configured{RESET}")
         return
+
+    print(f"{BLUE}[Amplitude] Updating user properties for {user_id[:8]}...{RESET}")
 
     try:
         async with httpx.AsyncClient() as client:
-            await client.post(
+            response = await client.post(
                 "https://api2.amplitude.com/2/httpapi",
                 json={
                     "api_key": settings.amplitude_api_key,
@@ -82,8 +100,12 @@ async def update_amplitude_user_properties(user_id: str, properties: dict):
                 },
                 timeout=10.0,
             )
+            if response.status_code == 200:
+                print(f"{GREEN}[Amplitude] ✓ Updated user properties{RESET}")
+            else:
+                print(f"{RED}[Amplitude] ✗ Failed to update user properties - HTTP {response.status_code}{RESET}")
     except Exception as e:
-        print(f"Failed to update Amplitude user properties: {e}")
+        print(f"{RED}[Amplitude] ✗ Error updating user properties: {e}{RESET}")
 
 
 async def fetch_event_segmentation(
