@@ -139,6 +139,9 @@ export default function SandboxPage() {
   const [hintContext, setHintContext] = useState<{ attempts?: number; repeated_errors?: boolean; code_history_length?: number } | undefined>();
   const [isRequestingHint, setIsRequestingHint] = useState(false);
 
+  // Helper to extract stderr from result
+  const currentStderr = result?.type === 'run' ? result.data.stderr : undefined;
+
   // Semantic observer for tracking code patterns
   const {
     analyzeCodeChange,
@@ -239,7 +242,7 @@ export default function SandboxPage() {
       const response = await requestContextualHint(
         taskId,
         code,
-        result?.stderr || null,
+        currentStderr || null,
       );
       if (response) {
         setHintContext(response.context);
@@ -248,7 +251,7 @@ export default function SandboxPage() {
     } finally {
       setIsRequestingHint(false);
     }
-  }, [taskId, code, result?.stderr, requestContextualHint, trackHintDisplayed, isRequestingHint]);
+  }, [taskId, code, currentStderr, requestContextualHint, trackHintDisplayed, isRequestingHint]);
 
   // Show proctoring modal for proctored tasks
   if (isProctored && !proctoringSessionId) {
@@ -397,7 +400,7 @@ export default function SandboxPage() {
         sessionId={sessionId}
         taskId={taskId}
         currentCode={code}
-        currentError={result?.stderr}
+        currentError={currentStderr}
       />
     </div>
   );
