@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from config import get_settings
 from db.mongo import connect_db, close_db
-from routes import auth, passkey, track, tasks, jobs, passport, video, radar
+from routes import auth, passkey, track, tasks, jobs, passport, video, radar, proctoring
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(jobs.router, prefix="/jobs", tags=["Jobs"])
 app.include_router(passport.router, prefix="/passport", tags=["Passport"])
 app.include_router(video.router, prefix="/video", tags=["Video"])
 app.include_router(radar.router, prefix="/radar", tags=["Radar"])
+app.include_router(proctoring.router, prefix="/proctoring", tags=["Proctoring"])
 
 
 @app.get("/health")

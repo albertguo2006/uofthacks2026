@@ -15,11 +15,15 @@ class Task(BaseModel):
     description: str
     difficulty: str = Field(pattern="^(easy|medium|hard)$")
     category: str = Field(pattern="^(bugfix|refactor|feature|optimization)$")
-    language: str = Field(pattern="^(python|javascript|typescript|cpp|java)$")
-    starter_code: str
+    # Multi-language support
+    languages: list[str] = Field(default_factory=list)
+    starter_codes: dict[str, str] = Field(default_factory=dict)
     solution_code: Optional[str] = None
     test_cases: list[TestCase]
     time_limit_seconds: int = 5
+    # Proctoring support
+    proctored: bool = False
+    tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -29,8 +33,10 @@ class TaskSummary(BaseModel):
     description: str
     difficulty: str
     category: str
-    language: str
+    languages: list[str] = Field(default_factory=list)
     estimated_minutes: int = 10
+    proctored: bool = False
+    tags: list[str] = Field(default_factory=list)
 
 
 class TasksResponse(BaseModel):

@@ -7,9 +7,14 @@ import { OutputPanel } from '@/components/sandbox/OutputPanel';
 import { TaskHeader } from '@/components/sandbox/TaskHeader';
 import { HintPanel } from '@/components/sandbox/HintPanel';
 import { RadarChartMini } from '@/components/passport/RadarChart';
+import { LanguageSelector } from '@/components/sandbox/LanguageSelector';
+import { ProctoringModal } from '@/components/proctoring/ProctoringModal';
+import { ProctoringIndicator } from '@/components/proctoring/ProctoringIndicator';
 import { useCodeExecution } from '@/hooks/useCodeExecution';
 import { useTasks } from '@/hooks/useTasks';
-import { Task } from '@/types/task';
+import { useProctoring } from '@/hooks/useProctoring';
+import { Task, Language } from '@/types/task';
+import { ViolationType } from '@/types/proctoring';
 import { useSessionIntervention, useRadar } from '@/hooks/useRadar';
 import { useSemanticObserver } from '@/hooks/useSemanticObserver';
 import { track } from '@/lib/telemetry';
@@ -20,19 +25,62 @@ export default function SandboxPage() {
   const params = useParams();
   const taskId = params.taskId as string;
 
-  const { getTask, fetchTask } = useTasks();
+  const { getTask, getTaskSummary, fetchTask, clearTaskCache } = useTasks();
   const [task, setTask] = useState<Task | undefined>(getTask(taskId));
+  const taskSummary = getTaskSummary(taskId);
 
   const [code, setCode] = useState('');
   const [codeLoaded, setCodeLoaded] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<Language>('javascript');
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Proctoring state
+  const [showProctoringModal, setShowProctoringModal] = useState(false);
+  const [proctoringSessionId, setProctoringSessionId] = useState<string | null>(null);
+  const [violationToast, setViolationToast] = useState<string | null>(null);
+
+  // Check if task is proctored (from summary or full task)
+  const isProctored = taskSummary?.proctored || task?.proctored || false;
+
+  // Proctoring hook
+  const proctoring = useProctoring({
+    taskId,
+    sessionId: proctoringSessionId,
+    enabled: isProctored && !!proctoringSessionId,
+    onViolation: (type: ViolationType, message: string) => {
+      setViolationToast(message);
+      setTimeout(() => setViolationToast(null), 5000);
+    },
+  });
+
+  // Handle proctoring modal acceptance
+  const handleProctoringAccept = async (cameraEnabled: boolean) => {
+    const session = await proctoring.startSession(cameraEnabled);
+    if (session) {
+      setProctoringSessionId(session.session_id);
+      setShowProctoringModal(false);
+      // Clear cache and refetch with proctoring session
+      clearTaskCache(taskId);
+    }
+  };
 
   // Fetch full task details and saved code on mount
   useEffect(() => {
     const loadTaskAndCode = async () => {
-      const fullTask = await fetchTask(taskId);
+      // For proctored tasks, show modal first if no session
+      if (isProctored && !proctoringSessionId) {
+        setShowProctoringModal(true);
+        return;
+      }
+
+      const fullTask = await fetchTask(taskId, proctoringSessionId || undefined);
       if (fullTask) {
         setTask(fullTask);
+
+        // Set initial language
+        if (fullTask.languages && fullTask.languages.length > 0) {
+          setSelectedLanguage(fullTask.languages[0] as Language);
+        }
 
         // Priority: 1. Saved code from API, 2. localStorage draft, 3. starter code
         try {
@@ -50,14 +98,34 @@ export default function SandboxPage() {
         if (draft) {
           setCode(draft);
         } else {
-          setCode(fullTask.starter_code);
+          // Get starter code for selected language
+          const lang = fullTask.languages?.[0] || 'javascript';
+          const starterCode = fullTask.starter_codes?.[lang as Language] || '';
+          setCode(starterCode);
         }
         setCodeLoaded(true);
       }
     };
 
     loadTaskAndCode();
-  }, [taskId, fetchTask]);
+  }, [taskId, fetchTask, isProctored, proctoringSessionId, clearTaskCache]);
+
+  // Handle language change
+  const handleLanguageChange = useCallback(
+    (language: Language) => {
+      setSelectedLanguage(language);
+      // Update code to language-specific starter code if no custom code
+      if (task?.starter_codes?.[language]) {
+        const draft = loadCodeDraft(`${taskId}-${language}`);
+        if (draft) {
+          setCode(draft);
+        } else {
+          setCode(task.starter_codes[language]);
+        }
+      }
+    },
+    [task, taskId]
+  );
 
   const [sessionId] = useState(() => crypto.randomUUID());
   const [showRadar, setShowRadar] = useState(false);
@@ -84,7 +152,7 @@ export default function SandboxPage() {
   } = useSemanticObserver({
     sessionId,
     taskId,
-    language: task?.language,
+    language: selectedLanguage,
   });
 
   // Cleanup save timeout on unmount
@@ -164,6 +232,34 @@ export default function SandboxPage() {
     acknowledgeHint();
   }, [intervention?.hint_category, trackHintAcknowledged, acknowledgeHint]);
 
+  // Show proctoring modal for proctored tasks
+  if (isProctored && !proctoringSessionId) {
+    return (
+      <>
+        <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold mb-2">Proctored Task</h2>
+            <p className="text-gray-500 mb-4">
+              Please accept the proctoring terms to view this task.
+            </p>
+            <button
+              onClick={() => setShowProctoringModal(true)}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              View Proctoring Terms
+            </button>
+          </div>
+        </div>
+        <ProctoringModal
+          isOpen={showProctoringModal}
+          onClose={() => window.history.back()}
+          onAccept={handleProctoringAccept}
+          taskTitle={taskSummary?.title}
+        />
+      </>
+    );
+  }
+
   if (!task) {
     return (
       <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
@@ -174,6 +270,24 @@ export default function SandboxPage() {
 
   return (
     <div className="min-h-[calc(100vh-8rem)] flex flex-col pb-8">
+      {/* Proctoring Indicator */}
+      {proctoring.isActive && (
+        <div className="mb-4">
+          <ProctoringIndicator
+            isActive={proctoring.isActive}
+            cameraEnabled={proctoring.cameraEnabled}
+            violationCount={proctoring.violationCount}
+          />
+        </div>
+      )}
+
+      {/* Violation Toast */}
+      {violationToast && (
+        <div className="fixed top-4 right-4 z-50 px-4 py-3 bg-red-100 dark:bg-red-900/50 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 rounded-lg shadow-lg animate-pulse">
+          {violationToast}
+        </div>
+      )}
+
       <TaskHeader task={task} />
 
       {/* AI Hint Panel */}
@@ -192,7 +306,14 @@ export default function SandboxPage() {
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">Code Editor</span>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500">{task.language}</span>
+              {/* Language Selector */}
+              {task.languages && task.languages.length > 0 && (
+                <LanguageSelector
+                  languages={task.languages}
+                  selected={selectedLanguage}
+                  onChange={handleLanguageChange}
+                />
+              )}
 
               {/* Mini Radar Chart Toggle */}
               <button
@@ -220,7 +341,7 @@ export default function SandboxPage() {
             <CodeEditor
               value={code}
               onChange={handleCodeChange}
-              language={task.language}
+              language={selectedLanguage}
               sessionId={sessionId}
               taskId={taskId}
             />

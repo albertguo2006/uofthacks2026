@@ -27,21 +27,40 @@ async def list_tasks(current_user: dict = Depends(get_current_user)):
     tasks = []
 
     async for task in cursor:
+        is_proctored = task.get("proctored", False)
+
+        # For proctored tasks, hide description until session starts
+        if is_proctored:
+            title = "[PROCTORED TASK]"
+            description = "Start proctored session to view task details"
+        else:
+            title = task["title"]
+            description = (
+                task["description"][:200] + "..."
+                if len(task["description"]) > 200
+                else task["description"]
+            )
+
+        # Handle both legacy (language) and new (languages) format
+        languages = task.get("languages", [])
+        if not languages and "language" in task:
+            languages = [task["language"]]
+
         tasks.append(
             TaskSummary(
                 task_id=task["task_id"],
-                title=task["title"],
-                description=task["description"][:200] + "..."
-                if len(task["description"]) > 200
-                else task["description"],
+                title=title,
+                description=description,
                 difficulty=task["difficulty"],
                 category=task["category"],
-                language=task["language"],
+                languages=languages,
                 estimated_minutes=10
                 if task["difficulty"] == "easy"
                 else 20
                 if task["difficulty"] == "medium"
                 else 30,
+                proctored=is_proctored,
+                tags=task.get("tags", []),
             )
         )
 
@@ -49,7 +68,11 @@ async def list_tasks(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/{task_id}", response_model=Task)
-async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):
+async def get_task(
+    task_id: str,
+    proctoring_session_id: str = None,
+    current_user: dict = Depends(get_current_user),
+):
     """Get task details with starter code."""
     task = await Collections.tasks().find_one({"task_id": task_id})
 
@@ -59,6 +82,27 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
             detail="Task not found",
         )
 
+    # For proctored tasks, verify active proctoring session
+    if task.get("proctored", False):
+        if not proctoring_session_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Proctored task requires active proctoring session",
+            )
+
+        session = await Collections.proctoring_sessions().find_one({
+            "session_id": proctoring_session_id,
+            "user_id": current_user["user_id"],
+            "task_id": task_id,
+            "status": "active",
+        })
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid or inactive proctoring session",
+            )
+
     # Filter out hidden test cases for response
     visible_test_cases = [
         {"input": tc["input"], "expected_output": tc["expected_output"], "hidden": False}
@@ -66,16 +110,28 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         if not tc.get("hidden", False)
     ]
 
+    # Handle both legacy (language/starter_code) and new (languages/starter_codes) format
+    languages = task.get("languages", [])
+    starter_codes = task.get("starter_codes", {})
+
+    if not languages and "language" in task:
+        languages = [task["language"]]
+    if not starter_codes and "starter_code" in task:
+        lang = task.get("language", "javascript")
+        starter_codes = {lang: task["starter_code"]}
+
     return Task(
         task_id=task["task_id"],
         title=task["title"],
         description=task["description"],
         difficulty=task["difficulty"],
         category=task["category"],
-        language=task["language"],
-        starter_code=task["starter_code"],
+        languages=languages,
+        starter_codes=starter_codes,
         test_cases=visible_test_cases,
         time_limit_seconds=task.get("time_limit_seconds", 5),
+        proctored=task.get("proctored", False),
+        tags=task.get("tags", []),
     )
 
 
@@ -253,7 +309,7 @@ async def submit_solution(
     )
 
     # Save the submitted code to user's saved_code collection
-    await Collections.db()["saved_code"].update_one(
+    await Collections.saved_code().update_one(
         {"user_id": current_user["user_id"], "task_id": task_id},
         {
             "$set": {
@@ -298,7 +354,7 @@ async def get_saved_code(
     current_user: dict = Depends(get_current_user),
 ):
     """Get user's previously saved code for a task."""
-    saved = await Collections.db()["saved_code"].find_one(
+    saved = await Collections.saved_code().find_one(
         {"user_id": current_user["user_id"], "task_id": task_id}
     )
 
