@@ -37,6 +37,7 @@ class TaskSummary(BaseModel):
     estimated_minutes: int = 10
     proctored: bool = False
     tags: list[str] = Field(default_factory=list)
+    passed: Optional[bool] = None
 
 
 class TasksResponse(BaseModel):

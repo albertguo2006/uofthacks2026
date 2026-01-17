@@ -74,7 +74,14 @@ export default function TasksPage() {
                     )}
                   </div>
                 </div>
-                <span className="text-primary-600 ml-4">Start →</span>
+                <div className="flex items-center gap-2 ml-4">
+                  {task.passed && (
+                    <span className="text-green-600 dark:text-green-400 text-lg" title="Completed">
+                      ✓
+                    </span>
+                  )}
+                  <span className="text-primary-600">Start →</span>
+                </div>
               </div>
             </Link>
           ))}

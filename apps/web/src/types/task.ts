@@ -24,6 +24,7 @@ export interface TaskSummary {
   estimated_minutes: number;
   proctored: boolean;
   tags: string[];
+  passed?: boolean | null;
 }
 
 export interface TestCase {
