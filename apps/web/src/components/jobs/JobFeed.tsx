@@ -1,8 +1,10 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useJobFeed } from '@/hooks/useJobFeed';
 import { JobCard } from './JobCard';
 import { UnlockAnimation } from './UnlockAnimation';
+import { api } from '@/lib/api';
 
 interface JobFeedProps {
   limit?: number;
@@ -11,6 +13,23 @@ interface JobFeedProps {
 
 export function JobFeed({ limit, showLocked = false }: JobFeedProps) {
   const { jobs, isLoading, newlyUnlocked } = useJobFeed({ includeLocked: showLocked });
+  const [appliedJobs, setAppliedJobs] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    async function fetchApplications() {
+      try {
+        const jobIds = await api.get<string[]>('/applications/my');
+        setAppliedJobs(new Set(jobIds));
+      } catch {
+        // Ignore errors fetching applications
+      }
+    }
+    fetchApplications();
+  }, []);
+
+  const handleApply = (jobId: string) => {
+    setAppliedJobs((prev) => new Set([...prev, jobId]));
+  };
 
   const displayJobs = limit ? jobs?.slice(0, limit) : jobs;
 
@@ -39,7 +58,12 @@ export function JobFeed({ limit, showLocked = false }: JobFeedProps) {
       {newlyUnlocked && <UnlockAnimation jobTitle={newlyUnlocked.title} />}
 
       {displayJobs.map((job) => (
-        <JobCard key={job.job_id} job={job} />
+        <JobCard
+          key={job.job_id}
+          job={job}
+          hasApplied={appliedJobs.has(job.job_id)}
+          onApply={handleApply}
+        />
       ))}
     </div>
   );

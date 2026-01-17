@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { CreateJobForm } from '@/components/jobs/CreateJobForm';
@@ -15,6 +16,7 @@ interface RecruiterJob {
   location: string;
   tags: string[];
   created_at: string;
+  applicant_count?: number;
 }
 
 export default function RecruiterJobsPage() {
@@ -26,7 +28,22 @@ export default function RecruiterJobsPage() {
   const fetchJobs = useCallback(async () => {
     try {
       const data = await api.get<RecruiterJob[]>('/jobs/recruiter');
-      setJobs(data);
+
+      // Fetch applicant counts for each job
+      const jobsWithCounts = await Promise.all(
+        data.map(async (job) => {
+          try {
+            const { count } = await api.get<{ count: number }>(
+              `/applications/job/${job.job_id}/count`
+            );
+            return { ...job, applicant_count: count };
+          } catch {
+            return { ...job, applicant_count: 0 };
+          }
+        })
+      );
+
+      setJobs(jobsWithCounts);
     } catch (err) {
       console.error('Failed to fetch jobs:', err);
     } finally {
@@ -134,15 +151,23 @@ export default function RecruiterJobsPage() {
                     </div>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(job.job_id)}
-                  disabled={deletingId === job.job_id}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  {deletingId === job.job_id ? 'Deleting...' : 'Delete'}
-                </Button>
+                <div className="flex flex-col items-end gap-2 ml-4">
+                  <Link
+                    href={`/recruiter/jobs/${job.job_id}/applicants`}
+                    className="px-4 py-2 bg-primary-600 text-white text-sm rounded hover:bg-primary-700"
+                  >
+                    View Applicants ({job.applicant_count || 0})
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(job.job_id)}
+                    disabled={deletingId === job.job_id}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    {deletingId === job.job_id ? 'Deleting...' : 'Delete'}
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
