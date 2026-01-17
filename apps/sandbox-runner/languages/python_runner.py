@@ -31,6 +31,8 @@ function_names = [
     'processUser', 'process_user',
     'solution', 'solve',
     'main', 'run',
+    'two_sum', 'twoSum',
+    'three_sum', 'threeSum',
 ]
 
 # Try each function name
@@ -66,6 +68,14 @@ if not found:
                         result = obj(input_data)
                     found = True
                     break
+                except TypeError:
+                    # Try unpacking as keyword arguments
+                    try:
+                        result = obj(**input_data)
+                        found = True
+                        break
+                    except:
+                        pass
                 except:
                     pass
 
