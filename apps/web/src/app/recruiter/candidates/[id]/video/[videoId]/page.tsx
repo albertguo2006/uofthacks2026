@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { api, VideoDetails, InterviewHighlight } from '@/lib/api';
+import { api, VideoDetails } from '@/lib/api';
 
 type SearchResult = {
   start_time: number;
@@ -30,9 +30,12 @@ export default function VideoDetailPage() {
   useEffect(() => {
     async function fetchVideo() {
       try {
+        console.log('[VideoDetail] Fetching video details for:', videoId);
         const details = await api.getVideoDetails(videoId);
+        console.log('[VideoDetail] Received video details:', details);
         setVideo(details);
       } catch (err) {
+        console.error('[VideoDetail] Error fetching video:', err);
         setError(err instanceof Error ? err.message : 'Failed to load video');
       } finally {
         setLoading(false);
@@ -117,6 +120,11 @@ export default function VideoDetailPage() {
     );
   }
 
+  // Check if any analysis data is available
+  const hasAnalysis = video.summary ||
+    video.communication_analysis ||
+    (video.highlights && video.highlights.length > 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -132,11 +140,22 @@ export default function VideoDetailPage() {
             Back to Candidate
           </Link>
         </div>
-        {video.duration_seconds && (
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            Duration: {formatDuration(video.duration_seconds)}
+        <div className="flex items-center gap-4">
+          <span className={`px-2 py-1 text-xs font-medium rounded ${
+            video.status === 'ready'
+              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+              : video.status === 'indexing'
+              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+              : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
+          }`}>
+            Status: {video.status}
           </span>
-        )}
+          {video.duration_seconds && (
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Duration: {formatDuration(video.duration_seconds)}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -152,6 +171,31 @@ export default function VideoDetailPage() {
               <p className="text-xs mt-1 opacity-75">AI analysis available below</p>
             </div>
           </div>
+
+          {/* No Analysis Available Message */}
+          {!hasAnalysis && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-6">
+              <div className="flex items-start gap-3">
+                <svg className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200">No AI Analysis Available</h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                    This video has not been analyzed by TwelveLabs AI. This could happen if:
+                  </p>
+                  <ul className="text-sm text-amber-700 dark:text-amber-300 mt-2 list-disc list-inside space-y-1">
+                    <li>The TwelveLabs API key is not configured on the server</li>
+                    <li>The video is still being processed</li>
+                    <li>There was an error during analysis</li>
+                  </ul>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-3">
+                    Please check the server configuration or try uploading the video again.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* AI Summary */}
           {video.summary && (
@@ -269,6 +313,20 @@ export default function VideoDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Debug Info (only shown if no analysis) */}
+          {!hasAnalysis && (
+            <div className="bg-gray-100 dark:bg-slate-800 rounded-lg p-4">
+              <details className="text-sm">
+                <summary className="cursor-pointer text-gray-600 dark:text-gray-400 font-medium">
+                  Debug: Video Data
+                </summary>
+                <pre className="mt-2 text-xs overflow-auto p-2 bg-gray-200 dark:bg-slate-900 rounded">
+                  {JSON.stringify(video, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -339,7 +397,7 @@ export default function VideoDetailPage() {
           </div>
 
           {/* Highlights */}
-          {video.highlights && video.highlights.length > 0 && (
+          {video.highlights && video.highlights.length > 0 ? (
             <div className="bg-white dark:bg-slate-800 rounded-lg p-6">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
                 <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -379,6 +437,18 @@ export default function VideoDetailPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-800 rounded-lg p-6">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+                Key Highlights
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No highlights available for this video.
+              </p>
             </div>
           )}
         </div>
