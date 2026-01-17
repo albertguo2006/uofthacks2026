@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { CodeEditor } from '@/components/sandbox/CodeEditor';
 import { OutputPanel } from '@/components/sandbox/OutputPanel';
@@ -13,6 +13,8 @@ import { Task } from '@/types/task';
 import { useSessionIntervention, useRadar } from '@/hooks/useRadar';
 import { useSemanticObserver } from '@/hooks/useSemanticObserver';
 import { track } from '@/lib/telemetry';
+import { saveCodeDraft, loadCodeDraft, clearCodeDraft } from '@/lib/codeStorage';
+import { api } from '@/lib/api';
 
 export default function SandboxPage() {
   const params = useParams();
@@ -22,15 +24,41 @@ export default function SandboxPage() {
   const [task, setTask] = useState<Task | undefined>(getTask(taskId));
 
   const [code, setCode] = useState('');
+  const [codeLoaded, setCodeLoaded] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch full task details on mount
+  // Fetch full task details and saved code on mount
   useEffect(() => {
-    fetchTask(taskId).then((fullTask) => {
+    const loadTaskAndCode = async () => {
+      const fullTask = await fetchTask(taskId);
       if (fullTask) {
         setTask(fullTask);
+
+        // Priority: 1. Saved code from API, 2. localStorage draft, 3. starter code
+        try {
+          const savedResponse = await api.get<{ code: string | null }>(`/tasks/${taskId}/saved-code`);
+          if (savedResponse.code) {
+            setCode(savedResponse.code);
+            setCodeLoaded(true);
+            return;
+          }
+        } catch (e) {
+          // No saved code or not logged in, continue to localStorage
+        }
+
+        const draft = loadCodeDraft(taskId);
+        if (draft) {
+          setCode(draft);
+        } else {
+          setCode(fullTask.starter_code);
+        }
+        setCodeLoaded(true);
       }
-    });
+    };
+
+    loadTaskAndCode();
   }, [taskId, fetchTask]);
+
   const [sessionId] = useState(() => crypto.randomUUID());
   const [showRadar, setShowRadar] = useState(false);
 
@@ -59,11 +87,14 @@ export default function SandboxPage() {
     language: task?.language,
   });
 
+  // Cleanup save timeout on unmount
   useEffect(() => {
-    if (task?.starter_code) {
-      setCode(task.starter_code);
-    }
-  }, [task]);
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // Track session start
@@ -93,7 +124,15 @@ export default function SandboxPage() {
     setCode(newCode);
     // Analyze code for semantic events
     analyzeCodeChange(newCode);
-  }, [analyzeCodeChange]);
+
+    // Debounced save to localStorage (500ms delay)
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveCodeDraft(taskId, newCode);
+    }, 500);
+  }, [analyzeCodeChange, taskId]);
 
   const handleRun = async () => {
     const runResult = await run(code);

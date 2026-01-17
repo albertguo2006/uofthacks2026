@@ -212,6 +212,23 @@ async def submit_solution(
         upsert=True,
     )
 
+    # Save the submitted code to user's saved_code collection
+    await Collections.db()["saved_code"].update_one(
+        {"user_id": current_user["user_id"], "task_id": task_id},
+        {
+            "$set": {
+                "user_id": current_user["user_id"],
+                "task_id": task_id,
+                "code": submission.code,
+                "language": language,
+                "submitted_at": datetime.utcnow(),
+                "passed": passed,
+                "score": score,
+            }
+        },
+        upsert=True,
+    )
+
     # Update passport in background
     background_tasks.add_task(
         update_passport_after_submit,
@@ -233,3 +250,25 @@ async def submit_solution(
         new_archetype=passport.get("archetype") if passport else None,
         jobs_unlocked=0,  # Will be computed async
     )
+
+
+@router.get("/{task_id}/saved-code")
+async def get_saved_code(
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get user's previously saved code for a task."""
+    saved = await Collections.db()["saved_code"].find_one(
+        {"user_id": current_user["user_id"], "task_id": task_id}
+    )
+
+    if not saved:
+        return {"code": None}
+
+    return {
+        "code": saved.get("code"),
+        "language": saved.get("language"),
+        "submitted_at": saved.get("submitted_at"),
+        "passed": saved.get("passed"),
+        "score": saved.get("score"),
+    }
