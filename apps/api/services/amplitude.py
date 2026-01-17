@@ -205,13 +205,14 @@ async def get_passport_analytics(user_id: str) -> dict:
     
     Returns metrics useful for the passport:
     - Total test runs, submissions, pass rate
-    - Error patterns
+    - AI assistance usage (hints, chat)
     - Session statistics
     - Integrity indicators
+    - Learning behavior patterns
     """
     from db.collections import Collections
     
-    # Get event counts
+    # Get all event counts
     event_counts = await fetch_user_event_counts(user_id)
     
     # Get session statistics
@@ -233,9 +234,29 @@ async def get_passport_analytics(user_id: str) -> dict:
         "event_type": "proctoring_violation",
     })
     
+    # Get AI chat message count
+    chat_messages = await Collections.chat_messages().count_documents({
+        "user_id": user_id,
+        "role": "user",
+    })
+    
     # Calculate derived metrics
     test_runs = event_counts.get("test_cases_ran", 0)
     submissions = event_counts.get("task_submitted", 0)
+    hints_requested = event_counts.get("contextual_hint_shown", 0)
+    hint_acknowledged = event_counts.get("hint_acknowledged", 0)
+    chat_help_requests = event_counts.get("chat_help_requested", 0)
+    code_changes = event_counts.get("code_changed", 0)
+    errors_encountered = event_counts.get("error_emitted", 0)
+    fixes_applied = event_counts.get("fix_applied", 0)
+    
+    # Calculate AI reliance score (lower = more independent)
+    total_actions = test_runs + submissions + code_changes
+    ai_assists = hints_requested + chat_help_requests
+    ai_reliance = ai_assists / total_actions if total_actions > 0 else 0
+    
+    # Calculate learning efficiency (how quickly they fix errors)
+    fix_efficiency = fixes_applied / errors_encountered if errors_encountered > 0 else 1.0
     
     return {
         "user_id": user_id,
@@ -250,6 +271,19 @@ async def get_passport_analytics(user_id: str) -> dict:
             "total_test_runs": test_runs,
             "total_submissions": submissions,
             "runs_per_submission": round(test_runs / submissions, 1) if submissions > 0 else 0,
+            "code_changes": code_changes,
+        },
+        "ai_assistance_metrics": {
+            "hints_requested": hints_requested,
+            "hints_acknowledged": hint_acknowledged,
+            "chat_messages_sent": chat_messages,
+            "chat_help_requests": chat_help_requests,
+            "ai_reliance_score": round(ai_reliance, 3),  # 0 = independent, 1 = heavily reliant
+        },
+        "learning_metrics": {
+            "errors_encountered": errors_encountered,
+            "fixes_applied": fixes_applied,
+            "fix_efficiency": round(min(fix_efficiency, 1.0), 2),  # Cap at 1.0
         },
         "integrity_metrics": {
             "violations": violations,

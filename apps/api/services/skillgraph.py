@@ -38,10 +38,11 @@ async def extract_session_features(user_id: str, session_id: str) -> dict:
     if not events:
         return {}
 
-    # Feature extraction
+    # Feature extraction - includes AI assistance tracking
     features = {
         "total_events": len(events),
         "run_attempts": 0,
+        "test_cases_ran": 0,
         "errors_encountered": 0,
         "fixes_applied": 0,
         "commands_used": set(),
@@ -50,6 +51,13 @@ async def extract_session_features(user_id: str, session_id: str) -> dict:
         "time_between_runs": [],
         "time_to_first_run": None,
         "shortcut_usage_ratio": 0,
+        # AI assistance metrics
+        "hints_requested": 0,
+        "hints_acknowledged": 0,
+        "chat_help_requests": 0,
+        # Integrity metrics
+        "violations": 0,
+        "tab_switches": 0,
     }
 
     first_event_time = events[0]["timestamp"] if events else None
@@ -61,8 +69,9 @@ async def extract_session_features(user_id: str, session_id: str) -> dict:
         event_type = event["event_type"]
         props = event.get("properties", {})
 
-        if event_type == "run_attempted":
+        if event_type in ("run_attempted", "test_cases_ran"):
             features["run_attempts"] += 1
+            features["test_cases_ran"] += 1
             if features["time_to_first_run"] is None and first_event_time:
                 features["time_to_first_run"] = (
                     event["timestamp"] - first_event_time
@@ -91,6 +100,23 @@ async def extract_session_features(user_id: str, session_id: str) -> dict:
         elif event_type == "paste_burst_detected":
             features["paste_bursts"] += 1
 
+        # AI assistance events
+        elif event_type == "contextual_hint_shown":
+            features["hints_requested"] += 1
+
+        elif event_type == "hint_acknowledged":
+            features["hints_acknowledged"] += 1
+
+        elif event_type == "chat_help_requested":
+            features["chat_help_requests"] += 1
+
+        # Integrity events
+        elif event_type == "proctoring_violation":
+            features["violations"] += 1
+
+        elif event_type == "tab_switch":
+            features["tab_switches"] += 1
+
     # Compute derived metrics
     features["commands_used"] = list(features["commands_used"])
     if total_commands > 0:
@@ -102,7 +128,16 @@ async def extract_session_features(user_id: str, session_id: str) -> dict:
 
 
 async def compute_skill_vector(user_id: str) -> list[float]:
-    """Compute aggregate skill vector from all user sessions."""
+    """
+    Compute aggregate skill vector from all user sessions.
+    
+    The 5 passport qualities are computed FROM tracked events:
+    - iteration_velocity: How quickly they iterate (test runs, code changes)
+    - debug_efficiency: How effectively they fix errors (fixes per error)
+    - craftsmanship: Code quality (fewer errors, less AI reliance)
+    - tool_fluency: Editor proficiency (shortcuts, commands)
+    - integrity: Honest work (no violations, minimal paste bursts)
+    """
     # Get all sessions
     cursor = Collections.sessions().find({
         "user_id": user_id,
@@ -123,20 +158,65 @@ async def compute_skill_vector(user_id: str) -> list[float]:
     if not all_features:
         return []
 
-    # Compute skill dimensions
-    # [iteration_velocity, debug_efficiency, craftsmanship, tool_fluency, integrity]
-    avg_runs = np.mean([f.get("run_attempts", 0) for f in all_features])
-    avg_errors = np.mean([f.get("errors_encountered", 0) for f in all_features])
-    avg_fixes = np.mean([f.get("fixes_applied", 0) for f in all_features])
+    # Aggregate all metrics
+    total_runs = sum(f.get("run_attempts", 0) for f in all_features)
+    total_test_runs = sum(f.get("test_cases_ran", 0) for f in all_features)
+    total_errors = sum(f.get("errors_encountered", 0) for f in all_features)
+    total_fixes = sum(f.get("fixes_applied", 0) for f in all_features)
+    total_code_changes = sum(f.get("code_changes", 0) for f in all_features)
+    total_paste_bursts = sum(f.get("paste_bursts", 0) for f in all_features)
+    total_violations = sum(f.get("violations", 0) for f in all_features)
+    total_tab_switches = sum(f.get("tab_switches", 0) for f in all_features)
+    
+    # AI assistance totals
+    total_hints = sum(f.get("hints_requested", 0) for f in all_features)
+    total_chat_help = sum(f.get("chat_help_requests", 0) for f in all_features)
+    total_ai_assists = total_hints + total_chat_help
+    
+    # Shortcut usage
     avg_shortcuts = np.mean([f.get("shortcut_usage_ratio", 0) for f in all_features])
-    avg_paste_bursts = np.mean([f.get("paste_bursts", 0) for f in all_features])
-
-    # Normalize to 0-1 range with reasonable bounds
-    iteration_velocity = min(1.0, avg_runs / 20.0)  # More runs = faster iteration
-    debug_efficiency = min(1.0, avg_fixes / max(avg_errors, 1))  # Fixes per error
-    craftsmanship = max(0.0, 1.0 - (avg_errors / 10.0))  # Fewer errors = more craft
-    tool_fluency = avg_shortcuts  # Already 0-1
-    integrity = max(0.0, 1.0 - (avg_paste_bursts / 5.0))  # Penalize paste bursts
+    
+    num_sessions = len(all_features)
+    
+    # ============================================
+    # COMPUTE THE 5 PASSPORT QUALITIES FROM EVENTS
+    # ============================================
+    
+    # 1. ITERATION_VELOCITY: How quickly they iterate
+    #    Based on: test runs per session, code changes
+    #    More runs + changes = faster iteration
+    runs_per_session = total_runs / num_sessions
+    changes_per_session = total_code_changes / num_sessions
+    iteration_velocity = min(1.0, (runs_per_session / 15.0) * 0.6 + (changes_per_session / 50.0) * 0.4)
+    
+    # 2. DEBUG_EFFICIENCY: How effectively they fix errors
+    #    Based on: fixes applied vs errors encountered
+    #    Higher fix rate = better debugging
+    if total_errors > 0:
+        fix_rate = total_fixes / total_errors
+        debug_efficiency = min(1.0, fix_rate)
+    else:
+        debug_efficiency = 1.0  # No errors = perfect
+    
+    # 3. CRAFTSMANSHIP: Code quality and independence
+    #    Based on: fewer errors, less AI reliance, good fix rate
+    #    Penalize heavy AI usage (shows less independent problem-solving)
+    error_penalty = min(1.0, total_errors / (num_sessions * 10))  # Errors per session
+    ai_reliance = total_ai_assists / max(total_runs + total_code_changes, 1)
+    ai_penalty = min(0.3, ai_reliance * 0.5)  # Cap AI penalty at 30%
+    craftsmanship = max(0.0, 1.0 - error_penalty * 0.5 - ai_penalty)
+    
+    # 4. TOOL_FLUENCY: Editor proficiency
+    #    Based on: keyboard shortcuts, editor commands
+    tool_fluency = avg_shortcuts
+    
+    # 5. INTEGRITY: Honest, focused work
+    #    Based on: violations, paste bursts, tab switches
+    #    Penalize suspicious behavior
+    violation_penalty = total_violations * 0.15  # -15% per violation
+    paste_penalty = min(0.3, total_paste_bursts / (num_sessions * 3) * 0.3)
+    tab_penalty = min(0.2, total_tab_switches / (num_sessions * 20) * 0.2)
+    integrity = max(0.0, 1.0 - violation_penalty - paste_penalty - tab_penalty)
 
     return [
         round(iteration_velocity, 3),
@@ -145,6 +225,77 @@ async def compute_skill_vector(user_id: str) -> list[float]:
         round(tool_fluency, 3),
         round(integrity, 3),
     ]
+
+
+async def get_metrics_breakdown(user_id: str) -> dict:
+    """
+    Get a detailed breakdown of how each passport metric was calculated.
+    Useful for showing users what factors influenced their scores.
+    """
+    cursor = Collections.sessions().find({
+        "user_id": user_id,
+        "submitted": True,
+    })
+    sessions = await cursor.to_list(length=100)
+
+    if not sessions:
+        return {"error": "No sessions found"}
+
+    all_features = []
+    for session in sessions:
+        features = await extract_session_features(user_id, session["session_id"])
+        if features:
+            all_features.append(features)
+
+    if not all_features:
+        return {"error": "No features extracted"}
+
+    num_sessions = len(all_features)
+    
+    # Aggregate totals
+    totals = {
+        "sessions": num_sessions,
+        "test_runs": sum(f.get("test_cases_ran", 0) for f in all_features),
+        "code_changes": sum(f.get("code_changes", 0) for f in all_features),
+        "errors": sum(f.get("errors_encountered", 0) for f in all_features),
+        "fixes": sum(f.get("fixes_applied", 0) for f in all_features),
+        "hints_requested": sum(f.get("hints_requested", 0) for f in all_features),
+        "chat_help_requests": sum(f.get("chat_help_requests", 0) for f in all_features),
+        "violations": sum(f.get("violations", 0) for f in all_features),
+        "paste_bursts": sum(f.get("paste_bursts", 0) for f in all_features),
+        "tab_switches": sum(f.get("tab_switches", 0) for f in all_features),
+    }
+    
+    return {
+        "totals": totals,
+        "metrics_explanation": {
+            "iteration_velocity": {
+                "description": "How quickly you iterate on code",
+                "factors": ["test_runs", "code_changes"],
+                "calculation": f"{totals['test_runs']} test runs + {totals['code_changes']} code changes across {num_sessions} sessions",
+            },
+            "debug_efficiency": {
+                "description": "How effectively you fix errors",
+                "factors": ["errors", "fixes"],
+                "calculation": f"{totals['fixes']} fixes / {totals['errors']} errors = {totals['fixes']/max(totals['errors'],1):.0%} fix rate",
+            },
+            "craftsmanship": {
+                "description": "Code quality and independent problem-solving",
+                "factors": ["errors", "hints_requested", "chat_help_requests"],
+                "calculation": f"Based on {totals['errors']} errors, {totals['hints_requested']} hints, {totals['chat_help_requests']} chat requests",
+            },
+            "tool_fluency": {
+                "description": "Editor proficiency via shortcuts",
+                "factors": ["shortcut_usage"],
+                "calculation": "Percentage of commands executed via keyboard shortcuts",
+            },
+            "integrity": {
+                "description": "Honest, focused work",
+                "factors": ["violations", "paste_bursts", "tab_switches"],
+                "calculation": f"{totals['violations']} violations, {totals['paste_bursts']} paste bursts, {totals['tab_switches']} tab switches",
+            },
+        },
+    }
 
 
 async def assign_archetype(skill_vector: list[float]) -> tuple[str, float]:
