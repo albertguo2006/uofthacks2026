@@ -5,7 +5,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Proof of Skill',
+  title: 'Simply Authentic',
   description: 'Identity-first freelance marketplace. Prove your skills through behavior, not resumes.',
 };
 

@@ -1,4 +1,4 @@
-export const APP_NAME = 'Proof of Skill';
+export const APP_NAME = 'Simply Authentic';
 
 export const POLLING_INTERVAL = 5000; // 5 seconds
 

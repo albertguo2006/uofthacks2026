@@ -1,9 +1,21 @@
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import NodeGraphBackground from '@/components/ui/NodeGraphBackground';
+
+// Dynamically import Moon3D to avoid SSR issues with Three.js
+const Moon3D = dynamic(() => import('@/components/ui/Moon3D'), { ssr: false });
 
 export default function Home() {
   return (
     <>
+      {/* Ombre gradient background - dark at top, lighter at bottom */}
+      <div 
+        className="fixed inset-0"
+        style={{ 
+          zIndex: -1,
+          background: 'linear-gradient(to bottom, rgb(15, 23, 42) 0%, rgb(30, 41, 59) 40%, rgb(51, 65, 85) 70%, rgb(71, 85, 105) 100%)'
+        }}
+      />
       <NodeGraphBackground
         nodeCount={100}
         connectionDistance={150}
@@ -11,10 +23,11 @@ export default function Home() {
         cursorRepelStrength={0.25}
         cursorTrailDelay={0.05}
       />
+      <Moon3D />
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-8">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-5xl font-bold mb-6">
-            Proof of Skill
+            Simply Authentic
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
             Your professional identity shouldn&apos;t be self-reported.
