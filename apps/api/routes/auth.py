@@ -3,7 +3,7 @@ from datetime import datetime
 from bson import ObjectId
 
 from models.user import UserCreate
-from models.auth import LoginRequest, Token, RegisterResponse
+from models.auth import LoginRequest, Token, RegisterResponse, UserInfo
 from db.collections import Collections
 from utils.security import hash_password, verify_password
 from utils.jwt import create_access_token
@@ -67,10 +67,13 @@ async def register(user_data: UserCreate):
     )
 
     return RegisterResponse(
-        user_id=user_id,
-        email=user_data.email,
-        role=user_data.role,
         access_token=access_token,
+        user=UserInfo(
+            user_id=user_id,
+            email=user_data.email,
+            role=user_data.role,
+            display_name=user_data.display_name,
+        ),
     )
 
 

@@ -18,12 +18,17 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 
-class RegisterResponse(BaseModel):
+class UserInfo(BaseModel):
     user_id: str
     email: str
     role: str
+    display_name: str
+
+
+class RegisterResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: UserInfo
 
 
 class PasskeyRegisterBeginResponse(BaseModel):
