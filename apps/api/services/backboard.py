@@ -233,6 +233,152 @@ This is attempt #{attempt_count}. Please provide a helpful hint.""",
         )
 
     # =========================================================================
+    # PERSONALIZED HINTS - Based on error profile (Adaptive Hints Feature)
+    # =========================================================================
+
+    async def generate_personalized_hint(
+        self,
+        code: str,
+        error: str,
+        attempt_count: int,
+        error_profile: dict,
+    ) -> dict:
+        """
+        Generate a personalized hint based on user's error profile.
+
+        Args:
+            code: Current code
+            error: Current error message
+            attempt_count: Number of attempts
+            error_profile: User's error profile from compute_error_profile()
+
+        Returns:
+            {
+                "hint": "The hint text",
+                "personalization_badge": "Based on your syntax error patterns",
+                "hint_style": "example-based"
+            }
+        """
+        dominant_category = error_profile.get("dominant_category", "logic")
+        effective_styles = error_profile.get("effective_hint_styles", ["conceptual"])
+        hint_style = effective_styles[0] if effective_styles else "conceptual"
+
+        # Get style-specific system prompt
+        system_prompt = self._get_style_prompt(dominant_category, hint_style)
+
+        # Generate personalization badge
+        badge = self._get_personalization_badge(dominant_category, error_profile)
+
+        hint = await self._call_model(
+            model="anthropic/claude-3-haiku-20240307",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"""The student's current code:
+```
+{code[:1500]}
+```
+
+Error/Issue: {error}
+
+This is attempt #{attempt_count}. Please provide a helpful hint.""",
+                },
+            ],
+            memory_key="hints",
+            temperature=0.8,
+            max_tokens=200,
+        )
+
+        return {
+            "hint": hint,
+            "personalization_badge": badge,
+            "hint_style": hint_style,
+            "dominant_category": dominant_category
+        }
+
+    def _get_style_prompt(self, dominant_category: str, hint_style: str) -> str:
+        """Get style-specific system prompt based on user's error patterns."""
+
+        base_rules = """Rules:
+- Give a brief, helpful hint (2-3 sentences max)
+- Don't give away the answer
+- Be encouraging and supportive
+- If you've given similar hints before (check your memory), try a different approach"""
+
+        if dominant_category == "syntax":
+            return f"""You are an encouraging coding mentor helping a student who often struggles with syntax errors.
+
+{base_rules}
+
+Style guidance for syntax strugglers:
+- Be code-focused with specific line numbers when possible
+- Show correct syntax patterns with examples
+- Point out common syntax pitfalls (missing brackets, semicolons, indentation)
+- Use format: "Check line X - [specific issue]. Pattern: `correct_syntax_here`"
+"""
+
+        elif dominant_category == "logic":
+            return f"""You are an encouraging coding mentor helping a student who often struggles with logical reasoning.
+
+{base_rules}
+
+Style guidance for logic strugglers:
+- Use Socratic questioning to guide their thinking
+- Ask "What did you expect vs what actually happened?"
+- Suggest debugging with print statements to trace values
+- Help them think through edge cases and conditions
+"""
+
+        elif dominant_category == "type":
+            return f"""You are an encouraging coding mentor helping a student who often struggles with type-related errors.
+
+{base_rules}
+
+Style guidance for type strugglers:
+- Emphasize type checking and validation
+- Suggest using typeof/type() to debug type issues
+- Point out common type coercion pitfalls
+- Help identify where undefined/null values might originate
+"""
+
+        else:  # runtime
+            return f"""You are an encouraging coding mentor helping a student who often encounters runtime errors.
+
+{base_rules}
+
+Style guidance for runtime issues:
+- Help identify potential infinite loops or recursion issues
+- Suggest adding base cases or termination conditions
+- Point out memory-intensive operations
+- Guide them to optimize or restructure problematic code
+"""
+
+    def _get_personalization_badge(self, dominant_category: str, error_profile: dict) -> str:
+        """Generate a personalization badge explaining why this hint style was chosen."""
+        trend = error_profile.get("recent_trend", "stable")
+        total_errors = error_profile.get("total_errors", 0)
+
+        if total_errors < 5:
+            return "Personalized hint"
+
+        category_labels = {
+            "syntax": "syntax error patterns",
+            "logic": "logical reasoning challenges",
+            "type": "type-related patterns",
+            "runtime": "runtime error history"
+        }
+
+        category_label = category_labels.get(dominant_category, "error patterns")
+
+        if trend == "improving":
+            return f"Based on your {category_label} (you're improving!)"
+        elif trend == "struggling":
+            return f"Tailored for your {category_label}"
+        else:
+            return f"Based on your {category_label}"
+
+    # =========================================================================
     # CODE ANALYSIS - GPT-4o (strong code understanding)
     # =========================================================================
 
@@ -402,10 +548,14 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
     # ADAPTIVE INTERVENTION - Intelligent model routing
     # =========================================================================
 
-    async def adaptive_intervention(self, session_context: dict) -> dict:
+    async def adaptive_intervention(self, session_context: dict, error_profile: dict = None) -> dict:
         """
         Intelligently choose intervention type and model based on context.
         This is the "adaptive" part that makes decisions based on user state.
+
+        Args:
+            session_context: Current session state
+            error_profile: User's historical error profile (optional, for personalization)
         """
         code = session_context.get("code", "")
         last_error = session_context.get("last_error")
@@ -413,48 +563,93 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
         time_stuck_ms = session_context.get("time_stuck_ms", 0)
         attempt_count = session_context.get("attempt_count", 1)
 
+        # Use personalized hints if error profile is available
+        use_personalized = error_profile and error_profile.get("has_data", False)
+
         # Decision tree for intervention type
         if error_streak >= 3 and last_error:
             # Technical stuck - use GPT for analysis + Claude for delivery
             analysis = await self.analyze_code_error(code, last_error)
-            hint = await self.generate_hint(code, last_error, attempt_count)
 
-            return {
-                "type": "technical_hint",
-                "analysis": analysis,
-                "hint": hint,
-                "model_used": ["gpt-4o-mini", "claude-3-haiku"],
-            }
+            if use_personalized:
+                hint_result = await self.generate_personalized_hint(
+                    code, last_error, attempt_count, error_profile
+                )
+                return {
+                    "type": "technical_hint",
+                    "analysis": analysis,
+                    "hint": hint_result["hint"],
+                    "personalization_badge": hint_result["personalization_badge"],
+                    "hint_style": hint_result["hint_style"],
+                    "model_used": ["gpt-4o-mini", "claude-3-haiku"],
+                }
+            else:
+                hint = await self.generate_hint(code, last_error, attempt_count)
+                return {
+                    "type": "technical_hint",
+                    "analysis": analysis,
+                    "hint": hint,
+                    "model_used": ["gpt-4o-mini", "claude-3-haiku"],
+                }
 
         elif time_stuck_ms > 180000:  # 3+ minutes without progress
             # Might need encouragement or different approach
-            hint = await self.generate_hint(
-                code,
-                "User seems stuck (no progress for 3 minutes)",
-                attempt_count,
-            )
-            encouragement = await self.generate_encouragement(
-                f"User has been working for {time_stuck_ms // 60000} minutes"
-            )
-
-            return {
-                "type": "encouragement",
-                "hint": hint,
-                "encouragement": encouragement,
-                "model_used": ["claude-3-haiku"],
-            }
+            if use_personalized:
+                hint_result = await self.generate_personalized_hint(
+                    code,
+                    "User seems stuck (no progress for 3 minutes)",
+                    attempt_count,
+                    error_profile
+                )
+                encouragement = await self.generate_encouragement(
+                    f"User has been working for {time_stuck_ms // 60000} minutes"
+                )
+                return {
+                    "type": "encouragement",
+                    "hint": hint_result["hint"],
+                    "encouragement": encouragement,
+                    "personalization_badge": hint_result["personalization_badge"],
+                    "hint_style": hint_result["hint_style"],
+                    "model_used": ["claude-3-haiku"],
+                }
+            else:
+                hint = await self.generate_hint(
+                    code,
+                    "User seems stuck (no progress for 3 minutes)",
+                    attempt_count,
+                )
+                encouragement = await self.generate_encouragement(
+                    f"User has been working for {time_stuck_ms // 60000} minutes"
+                )
+                return {
+                    "type": "encouragement",
+                    "hint": hint,
+                    "encouragement": encouragement,
+                    "model_used": ["claude-3-haiku"],
+                }
 
         elif error_streak >= 2:
             # Early intervention - quick hint
-            hint = await self.generate_hint(
-                code, last_error or "struggling", attempt_count
-            )
-
-            return {
-                "type": "gentle_nudge",
-                "hint": hint,
-                "model_used": ["claude-3-haiku"],
-            }
+            if use_personalized:
+                hint_result = await self.generate_personalized_hint(
+                    code, last_error or "struggling", attempt_count, error_profile
+                )
+                return {
+                    "type": "gentle_nudge",
+                    "hint": hint_result["hint"],
+                    "personalization_badge": hint_result["personalization_badge"],
+                    "hint_style": hint_result["hint_style"],
+                    "model_used": ["claude-3-haiku"],
+                }
+            else:
+                hint = await self.generate_hint(
+                    code, last_error or "struggling", attempt_count
+                )
+                return {
+                    "type": "gentle_nudge",
+                    "hint": hint,
+                    "model_used": ["claude-3-haiku"],
+                }
 
         return {"type": "none"}
 

@@ -69,6 +69,15 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: H
       `}
     >
       <div className={`border-l-4 rounded-r-lg p-4 ${colorClass}`}>
+        {/* Personalization Badge */}
+        {intervention.personalization_badge && (
+          <div className="mb-2 flex items-center gap-1.5">
+            <span className="px-2 py-0.5 text-xs bg-primary-500/20 text-primary-300 rounded-full border border-primary-500/30">
+              {intervention.personalization_badge}
+            </span>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -78,7 +87,7 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: H
             <span className="text-sm font-medium text-gray-200">
               {category === 'encouragement' ? 'Keep going!' : 'Hint'}
             </span>
-            {intervention.intervention_type && (
+            {intervention.intervention_type && !intervention.personalization_badge && (
               <span className="text-xs text-gray-500 ml-2">
                 ({intervention.intervention_type.replace('_', ' ')})
               </span>
