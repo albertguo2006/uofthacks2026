@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from datetime import datetime
 import uuid
+from bson import ObjectId
 
 from middleware.auth import get_current_user
 from db.collections import Collections
+from services.amplitude import forward_to_amplitude
 from models.proctoring import (
     ProctoringSession,
     ProctoringStatus,
@@ -78,6 +80,7 @@ async def start_proctoring_session(
 async def report_violation(
     session_id: str,
     request: ReportViolationRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """Report a proctoring violation."""
@@ -107,6 +110,37 @@ async def report_violation(
     await Collections.proctoring_sessions().update_one(
         {"session_id": session_id},
         {"$push": {"violations": violation.model_dump()}},
+    )
+
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": current_user["user_id"],
+        "session_id": session_id,
+        "task_id": session["task_id"],
+        "event_type": "proctoring_violation",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "violation_type": request.violation_type,
+            "details": request.details,
+        },
+        "forwarded_to_amplitude": False,
+        "processed_for_ml": False,
+    }
+
+    await Collections.events().insert_one(event_doc)
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=current_user["user_id"],
+        event_type="proctoring_violation",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "session_id": session_id,
+            "task_id": session["task_id"],
+            "violation_type": request.violation_type,
+            "details": request.details,
+        },
     )
 
     return {"success": True, "violation_type": request.violation_type}
