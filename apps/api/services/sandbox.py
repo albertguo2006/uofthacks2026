@@ -93,6 +93,12 @@ async def execute_code(
 
 def compare_outputs(actual: Any, expected: Any) -> bool:
     """Compare actual output with expected output."""
+    # Normalize string "null" to actual None (can happen with JSON parsing edge cases)
+    if actual == "null":
+        actual = None
+    if expected == "null":
+        expected = None
+
     # Handle None/null comparison
     if actual is None and expected is None:
         return True
