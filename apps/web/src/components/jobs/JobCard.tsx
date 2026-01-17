@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Job } from '@/types/job';
 import { api } from '@/lib/api';
 
@@ -14,6 +14,10 @@ export function JobCard({ job, hasApplied = false, onApply }: JobCardProps) {
   const [isApplying, setIsApplying] = useState(false);
   const [applied, setApplied] = useState(hasApplied);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApplied(hasApplied);
+  }, [hasApplied]);
 
   const tierColors = {
     0: 'border-gray-200 dark:border-slate-600',
