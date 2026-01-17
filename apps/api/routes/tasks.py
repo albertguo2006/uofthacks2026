@@ -14,6 +14,7 @@ from models.task import (
     SubmitResult,
 )
 from services.sandbox import execute_code
+from services.amplitude import forward_to_amplitude
 from services.skillgraph import update_passport_after_submit
 
 router = APIRouter()
@@ -82,6 +83,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
 async def run_code(
     task_id: str,
     submission: TaskSubmission,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """Execute code in sandbox and run tests."""
@@ -143,6 +145,44 @@ async def run_code(
                 )
             )
             all_passed = False
+
+    tests_passed = sum(1 for result in results if result.passed)
+    tests_total = len(results)
+
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": current_user["user_id"],
+        "session_id": submission.session_id,
+        "task_id": task_id,
+        "event_type": "test_cases_ran",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "tests_passed": tests_passed,
+            "tests_total": tests_total,
+            "runtime_ms": total_time_ms,
+            "result": "pass" if all_passed else "fail",
+        },
+        "forwarded_to_amplitude": False,
+        "processed_for_ml": False,
+    }
+
+    await Collections.events().insert_one(event_doc)
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=current_user["user_id"],
+        event_type="test_cases_ran",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "session_id": submission.session_id,
+            "task_id": task_id,
+            "tests_passed": tests_passed,
+            "tests_total": tests_total,
+            "runtime_ms": total_time_ms,
+            "result": "pass" if all_passed else "fail",
+        },
+    )
 
     return RunResult(
         success=True,
