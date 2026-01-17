@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Amplitude
     amplitude_api_key: str = ""
+    amplitude_secret_key: str = ""
 
     # TwelveLabs
     twelvelabs_api_key: str = ""

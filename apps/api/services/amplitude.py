@@ -1,4 +1,5 @@
 import httpx
+import json
 from config import get_settings
 from db.collections import Collections
 
@@ -83,3 +84,35 @@ async def update_amplitude_user_properties(user_id: str, properties: dict):
             )
     except Exception as e:
         print(f"Failed to update Amplitude user properties: {e}")
+
+
+async def fetch_event_segmentation(
+    event_type: str,
+    start: str,
+    end: str,
+    interval: int = 1,
+    metric: str = "totals",
+) -> dict:
+    """Fetch event segmentation data from Amplitude Data API."""
+    settings = get_settings()
+
+    if not settings.amplitude_api_key or not settings.amplitude_secret_key:
+        raise ValueError("Amplitude API key or secret key not configured")
+
+    params = {
+        "e": json.dumps({"event_type": event_type}),
+        "start": start,
+        "end": end,
+        "i": interval,
+        "m": metric,
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "https://amplitude.com/api/2/events/segmentation",
+            params=params,
+            auth=(settings.amplitude_api_key, settings.amplitude_secret_key),
+            timeout=20.0,
+        )
+        response.raise_for_status()
+        return response.json()
