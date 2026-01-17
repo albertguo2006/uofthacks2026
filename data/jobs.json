@@ -1,0 +1,130 @@
+[
+  {
+    "job_id": "tier0-landing-page",
+    "title": "Build a Marketing Landing Page",
+    "description": "Create a responsive landing page for a startup's new product launch. Includes hero section, features grid, testimonials, and CTA.",
+    "company": "StartupCo",
+    "tier": 0,
+    "target_vector": [0.4, 0.3, 0.5, 0.3, 0.8],
+    "min_fit": 0.3,
+    "must_have": {
+      "min_sessions": 1
+    },
+    "salary_range": "$40-60k",
+    "location": "Remote",
+    "tags": ["frontend", "react", "css", "entry-level"]
+  },
+  {
+    "job_id": "tier0-api-endpoint",
+    "title": "Add REST API Endpoint",
+    "description": "Implement a new endpoint for user profile updates with validation and error handling.",
+    "company": "DevAgency",
+    "tier": 0,
+    "target_vector": [0.5, 0.4, 0.4, 0.4, 0.8],
+    "min_fit": 0.35,
+    "must_have": {
+      "min_sessions": 1
+    },
+    "salary_range": "$45-65k",
+    "location": "Remote",
+    "tags": ["backend", "nodejs", "api", "entry-level"]
+  },
+  {
+    "job_id": "tier1-dashboard-feature",
+    "title": "Build Analytics Dashboard Feature",
+    "description": "Implement interactive charts and data visualization for a SaaS analytics platform. Requires state management and API integration.",
+    "company": "DataViz Inc",
+    "tier": 1,
+    "target_vector": [0.6, 0.5, 0.6, 0.5, 0.85],
+    "min_fit": 0.5,
+    "must_have": {
+      "min_sessions": 3,
+      "min_integrity": 0.7
+    },
+    "salary_range": "$70-90k",
+    "location": "Remote",
+    "tags": ["frontend", "react", "typescript", "charts"]
+  },
+  {
+    "job_id": "tier1-payment-integration",
+    "title": "Integrate Payment Processing",
+    "description": "Add Stripe payment integration with subscription management, webhooks, and error handling.",
+    "company": "FinanceApp Co",
+    "tier": 1,
+    "target_vector": [0.5, 0.7, 0.6, 0.5, 0.9],
+    "min_fit": 0.55,
+    "must_have": {
+      "min_sessions": 3,
+      "min_integrity": 0.8
+    },
+    "salary_range": "$75-95k",
+    "location": "Hybrid - NYC",
+    "tags": ["backend", "payments", "stripe", "security"]
+  },
+  {
+    "job_id": "tier1-mobile-feature",
+    "title": "React Native Feature Development",
+    "description": "Build offline-capable features for a mobile app including local storage, sync, and conflict resolution.",
+    "company": "MobileFirst",
+    "tier": 1,
+    "target_vector": [0.6, 0.6, 0.5, 0.6, 0.85],
+    "min_fit": 0.52,
+    "must_have": {
+      "min_sessions": 2,
+      "required_archetypes": ["fast_iterator", "debugger"]
+    },
+    "salary_range": "$80-100k",
+    "location": "Remote",
+    "tags": ["mobile", "react-native", "offline", "sync"]
+  },
+  {
+    "job_id": "tier2-refactor-billing",
+    "title": "Refactor Legacy Billing System",
+    "description": "Modernize a monolithic billing service into microservices. Requires careful testing and zero-downtime migration.",
+    "company": "EnterpriseTech",
+    "tier": 2,
+    "target_vector": [0.5, 0.8, 0.8, 0.6, 0.95],
+    "min_fit": 0.65,
+    "must_have": {
+      "min_sessions": 5,
+      "min_integrity": 0.85,
+      "required_archetypes": ["careful_tester", "craftsman"]
+    },
+    "salary_range": "$120-150k",
+    "location": "Hybrid - SF",
+    "tags": ["backend", "microservices", "refactoring", "senior"]
+  },
+  {
+    "job_id": "tier2-performance-optimization",
+    "title": "Performance Engineering Lead",
+    "description": "Lead performance optimization initiative for high-traffic e-commerce platform. Profile, identify bottlenecks, and implement solutions.",
+    "company": "ScaleUp Commerce",
+    "tier": 2,
+    "target_vector": [0.7, 0.8, 0.7, 0.7, 0.9],
+    "min_fit": 0.68,
+    "must_have": {
+      "min_sessions": 6,
+      "min_integrity": 0.9,
+      "required_archetypes": ["debugger", "craftsman"]
+    },
+    "salary_range": "$140-170k",
+    "location": "Remote",
+    "tags": ["performance", "optimization", "lead", "senior"]
+  },
+  {
+    "job_id": "tier2-ml-pipeline",
+    "title": "Build ML Feature Pipeline",
+    "description": "Design and implement real-time feature engineering pipeline for recommendation system. Requires data engineering and ML ops experience.",
+    "company": "AI Startup",
+    "tier": 2,
+    "target_vector": [0.6, 0.7, 0.7, 0.8, 0.9],
+    "min_fit": 0.7,
+    "must_have": {
+      "min_sessions": 5,
+      "min_integrity": 0.88
+    },
+    "salary_range": "$150-180k",
+    "location": "Remote",
+    "tags": ["ml", "data-engineering", "python", "senior"]
+  }
+]

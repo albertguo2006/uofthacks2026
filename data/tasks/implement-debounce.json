@@ -1,0 +1,33 @@
+{
+  "task_id": "implement-debounce",
+  "title": "Implement Debounce Function",
+  "description": "## Problem\n\nImplement a `debounce` function that delays invoking a function until after a specified wait time has elapsed since the last time it was invoked.\n\n## Requirements\n\n1. Returns a debounced function\n2. The debounced function delays invocation by `wait` milliseconds\n3. If called again before wait expires, reset the timer\n4. Should work with any function and preserve `this` context\n\n## Example\n\n```javascript\nconst debouncedFn = debounce(expensiveCall, 300);\ndebouncedFn(); // Won't execute immediately\ndebouncedFn(); // Resets timer\n// After 300ms of no calls, expensiveCall executes once\n```\n\n## Hints\n\n- Use `setTimeout` and `clearTimeout`\n- Use a closure to store the timeout ID",
+  "difficulty": "medium",
+  "category": "feature",
+  "language": "javascript",
+  "starter_code": "function debounce(func, wait) {\n  // Your implementation here\n}\n\nmodule.exports = { debounce };",
+  "solution_code": "function debounce(func, wait) {\n  let timeoutId = null;\n  \n  return function(...args) {\n    const context = this;\n    \n    clearTimeout(timeoutId);\n    \n    timeoutId = setTimeout(() => {\n      func.apply(context, args);\n    }, wait);\n  };\n}\n\nmodule.exports = { debounce };",
+  "test_cases": [
+    {
+      "input": {"test": "returns_function"},
+      "expected_output": "function",
+      "hidden": false
+    },
+    {
+      "input": {"test": "delays_execution", "wait": 100},
+      "expected_output": true,
+      "hidden": false
+    },
+    {
+      "input": {"test": "resets_timer", "wait": 50},
+      "expected_output": true,
+      "hidden": true
+    },
+    {
+      "input": {"test": "passes_arguments"},
+      "expected_output": true,
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 10
+}

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    networks:
+      - proof-of-skill
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/proof_of_skill}
+      - DATABASE_NAME=${DATABASE_NAME:-proof_of_skill}
+      - JWT_SECRET=${JWT_SECRET:-development-secret-change-in-production}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRY_HOURS=1
+      - AMPLITUDE_API_KEY=${AMPLITUDE_API_KEY:-}
+      - TWELVELABS_API_KEY=${TWELVELABS_API_KEY:-}
+      - SANDBOX_RUNNER_URL=http://sandbox-runner:8080
+      - WEBAUTHN_RP_ID=localhost
+      - WEBAUTHN_RP_NAME=Proof of Skill
+      - WEBAUTHN_ORIGIN=http://localhost:3000
+      - CORS_ORIGINS=["http://localhost:3000"]
+    depends_on:
+      - mongo
+      - sandbox-runner
+    networks:
+      - proof-of-skill
+
+  sandbox-runner:
+    build:
+      context: ./apps/sandbox-runner
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp/sandbox:size=100M
+    networks:
+      - proof-of-skill
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - proof-of-skill
+
+networks:
+  proof-of-skill:
+    driver: bridge
+
+volumes:
+  mongo-data:

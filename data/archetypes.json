@@ -1,0 +1,122 @@
+[
+  {
+    "name": "fast_iterator",
+    "label": "Fast Iterator",
+    "description": "Rapid prototyper who values quick feedback cycles and iterative improvement. Runs code frequently, experiments with solutions, and converges quickly on working implementations.",
+    "traits": [
+      "High run frequency",
+      "Quick error recovery",
+      "Experimental approach",
+      "Values feedback loops"
+    ],
+    "strengths": [
+      "Rapid prototyping",
+      "MVP development",
+      "Exploratory coding",
+      "Quick turnaround projects"
+    ],
+    "ideal_for": [
+      "Startup environments",
+      "Proof of concepts",
+      "Feature exploration",
+      "Hackathons"
+    ],
+    "color": "#3B82F6"
+  },
+  {
+    "name": "careful_tester",
+    "label": "Careful Tester",
+    "description": "Prioritizes test coverage and validation before shipping. Writes tests alongside code, validates edge cases, and ensures reliability before moving on.",
+    "traits": [
+      "High test coverage",
+      "Edge case awareness",
+      "Validates before proceeding",
+      "Documentation-minded"
+    ],
+    "strengths": [
+      "Reliable code",
+      "Production-ready output",
+      "Low bug rates",
+      "Maintainable solutions"
+    ],
+    "ideal_for": [
+      "Financial systems",
+      "Healthcare applications",
+      "Security-critical code",
+      "Long-term projects"
+    ],
+    "color": "#10B981"
+  },
+  {
+    "name": "debugger",
+    "label": "Systematic Debugger",
+    "description": "Methodical problem-solver who excels at tracking down issues. Uses structured approaches to isolate problems, understands error messages deeply, and fixes root causes.",
+    "traits": [
+      "Systematic investigation",
+      "Root cause analysis",
+      "Tool proficiency",
+      "Pattern recognition"
+    ],
+    "strengths": [
+      "Bug fixing",
+      "Legacy code maintenance",
+      "Performance troubleshooting",
+      "Integration issues"
+    ],
+    "ideal_for": [
+      "Support engineering",
+      "DevOps",
+      "Legacy modernization",
+      "Complex system debugging"
+    ],
+    "color": "#F59E0B"
+  },
+  {
+    "name": "craftsman",
+    "label": "Code Craftsman",
+    "description": "Focuses on clean, maintainable code with attention to detail. Refactors proactively, uses clear naming, and produces code that others can easily understand and extend.",
+    "traits": [
+      "Clean code focus",
+      "Refactoring habit",
+      "Clear naming",
+      "SOLID principles"
+    ],
+    "strengths": [
+      "Maintainable codebases",
+      "Code reviews",
+      "Technical leadership",
+      "Architecture"
+    ],
+    "ideal_for": [
+      "Core platform work",
+      "Library development",
+      "Team lead roles",
+      "Open source"
+    ],
+    "color": "#8B5CF6"
+  },
+  {
+    "name": "explorer",
+    "label": "Explorer",
+    "description": "Creative problem-solver who tries multiple approaches. Not afraid to experiment, learns from failures, and often finds novel solutions to complex problems.",
+    "traits": [
+      "Multiple approaches",
+      "Creative solutions",
+      "Learning from failure",
+      "Curiosity-driven"
+    ],
+    "strengths": [
+      "Novel problem solving",
+      "Research and development",
+      "Prototyping",
+      "Breaking new ground"
+    ],
+    "ideal_for": [
+      "R&D teams",
+      "Innovation projects",
+      "Greenfield development",
+      "Technical exploration"
+    ],
+    "color": "#EC4899"
+  }
+]

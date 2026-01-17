@@ -1,0 +1,28 @@
+version: '3.8'
+
+# Development overrides
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  web:
+    build:
+      context: ./apps/web
+      target: development
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/public:/app/public
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+
+  api:
+    volumes:
+      - ./apps/api:/app
+    environment:
+      - DEBUG=1
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  sandbox-runner:
+    volumes:
+      - ./apps/sandbox-runner:/app
+    command: python server.py
