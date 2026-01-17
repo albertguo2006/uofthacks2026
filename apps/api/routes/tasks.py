@@ -395,21 +395,22 @@ async def submit_solution(
     score = int((passed_count / total_count) * 100) if total_count > 0 else 0
 
     # Update session
-    session_doc = {
-        "_id": str(ObjectId()),
-        "session_id": submission.session_id,
-        "user_id": current_user["user_id"],
-        "task_id": task_id,
-        "started_at": datetime.utcnow(),  # Approximate
-        "ended_at": datetime.utcnow(),
-        "submitted": True,
-        "passed": passed,
-        "score": score,
-    }
-
     await Collections.sessions().update_one(
         {"session_id": submission.session_id},
-        {"$set": session_doc},
+        {
+            "$set": {
+                "ended_at": datetime.utcnow(),
+                "submitted": True,
+                "passed": passed,
+                "score": score,
+            },
+            "$setOnInsert": {
+                "session_id": submission.session_id,
+                "user_id": current_user["user_id"],
+                "task_id": task_id,
+                "started_at": datetime.utcnow(),
+            },
+        },
         upsert=True,
     )
 
