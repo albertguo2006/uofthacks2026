@@ -2,11 +2,12 @@
 Recruiter API Routes (Feature 2 - Hiring Selection)
 
 Provides AI-powered candidate ranking and analysis:
+- GET /recruiter/candidates - List all candidates with filtering
 - GET /recruiter/candidates/ranked - Get AI-ranked candidates for a job
 - GET /recruiter/candidates/{user_id}/analysis - Get detailed AI analysis for a candidate
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -16,6 +17,7 @@ from middleware.auth import get_current_user
 from db.collections import Collections
 from services.backboard import BackboardService
 from services.amplitude import forward_to_amplitude
+from routes.passport import ARCHETYPES
 
 router = APIRouter()
 
@@ -68,6 +70,69 @@ def require_recruiter(current_user: dict = Depends(get_current_user)):
             detail="Only recruiters can access this endpoint",
         )
     return current_user
+
+
+@router.get("/candidates")
+async def get_candidates(
+    archetype: Optional[str] = Query(None, description="Filter by archetype"),
+    current_user: dict = Depends(require_recruiter),
+):
+    """Get list of candidates with their passport data. Recruiters only."""
+    # Build query for candidate users
+    user_query = {"role": "candidate"}
+    users = await Collections.users().find(user_query).to_list(length=1000)
+
+    candidates = []
+    for user in users:
+        user_id = user["_id"]
+
+        # Get passport data
+        passport = await Collections.passports().find_one({"user_id": user_id})
+
+        # Apply archetype filter if specified
+        user_archetype = passport.get("archetype") if passport else None
+        if archetype and user_archetype != archetype:
+            continue
+
+        # Get session count
+        sessions_completed = await Collections.sessions().count_documents(
+            {"user_id": user_id, "submitted": True}
+        )
+
+        # Check if user has video
+        has_video = False
+        if passport and passport.get("interview_video_id"):
+            video = await Collections.videos().find_one(
+                {"_id": passport["interview_video_id"], "status": "ready"}
+            )
+            has_video = video is not None
+
+        # Build archetype info
+        archetype_label = None
+        if user_archetype:
+            archetype_info = ARCHETYPES.get(user_archetype, {})
+            archetype_label = archetype_info.get("label", user_archetype)
+
+        # Build metrics
+        metrics = {}
+        if passport and passport.get("metrics"):
+            metrics = passport["metrics"]
+
+        candidates.append({
+            "user_id": user_id,
+            "display_name": user.get("display_name", ""),
+            "email": user.get("email", ""),
+            "archetype": user_archetype,
+            "archetype_label": archetype_label,
+            "metrics": metrics,
+            "sessions_completed": sessions_completed,
+            "has_video": has_video,
+        })
+
+    return {
+        "candidates": candidates,
+        "total": len(candidates),
+    }
 
 
 @router.get("/candidates/ranked", response_model=RankedCandidatesResponse)

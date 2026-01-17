@@ -28,6 +28,7 @@ export interface InterviewHighlight {
 
 export interface Interview {
   has_video: boolean;
+  video_id?: string;
   highlights: InterviewHighlight[];
 }
 
