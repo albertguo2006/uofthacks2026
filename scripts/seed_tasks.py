@@ -32,6 +32,13 @@ async def seed_tasks():
     task_files = list(tasks_dir.glob("*.json"))
     print(f"Found {len(task_files)} task files")
 
+    # Check if tasks already exist in database
+    existing_count = await db.tasks.count_documents({})
+    if existing_count >= len(task_files):
+        print(f"  Skipping: {existing_count} tasks already in database")
+        client.close()
+        return
+
     for task_file in task_files:
         with open(task_file) as f:
             task = json.load(f)
@@ -69,6 +76,13 @@ async def seed_jobs():
         jobs = json.load(f)
 
     print(f"Found {len(jobs)} jobs")
+
+    # Check if jobs already exist in database
+    existing_count = await db.jobs.count_documents({})
+    if existing_count >= len(jobs):
+        print(f"  Skipping: {existing_count} jobs already in database")
+        client.close()
+        return
 
     for job in jobs:
         job["created_at"] = datetime.utcnow()
