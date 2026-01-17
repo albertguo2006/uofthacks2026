@@ -1,0 +1,106 @@
+from fastapi import APIRouter, Depends, BackgroundTasks
+from datetime import datetime
+from bson import ObjectId
+
+from middleware.auth import get_current_user
+from db.collections import Collections
+from models.event import TrackEvent, TrackEventResponse
+from services.amplitude import forward_to_amplitude
+
+router = APIRouter()
+
+
+@router.post("", response_model=TrackEventResponse, status_code=202)
+async def track_event(
+    event: TrackEvent,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """Ingest a behavioral event."""
+    event_id = str(ObjectId())
+
+    # Convert timestamp from Unix ms to datetime
+    event_timestamp = datetime.utcfromtimestamp(event.timestamp / 1000)
+
+    # Store event
+    event_doc = {
+        "_id": event_id,
+        "user_id": current_user["user_id"],
+        "session_id": event.session_id,
+        "task_id": event.task_id,
+        "event_type": event.event_type,
+        "timestamp": event_timestamp,
+        "properties": event.properties,
+        "forwarded_to_amplitude": False,
+        "processed_for_ml": False,
+    }
+
+    await Collections.events().insert_one(event_doc)
+
+    # Forward to Amplitude in background
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=current_user["user_id"],
+        event_type=event.event_type,
+        timestamp=event.timestamp,
+        properties={
+            **event.properties,
+            "session_id": event.session_id,
+            "task_id": event.task_id,
+        },
+    )
+
+    return TrackEventResponse(
+        event_id=event_id,
+        forwarded_to_amplitude=True,  # Will be forwarded async
+    )
+
+
+@router.post("/batch", status_code=202)
+async def track_events_batch(
+    events: list[TrackEvent],
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """Ingest multiple behavioral events at once."""
+    event_ids = []
+
+    for event in events:
+        event_id = str(ObjectId())
+        event_ids.append(event_id)
+
+        event_timestamp = datetime.utcfromtimestamp(event.timestamp / 1000)
+
+        event_doc = {
+            "_id": event_id,
+            "user_id": current_user["user_id"],
+            "session_id": event.session_id,
+            "task_id": event.task_id,
+            "event_type": event.event_type,
+            "timestamp": event_timestamp,
+            "properties": event.properties,
+            "forwarded_to_amplitude": False,
+            "processed_for_ml": False,
+        }
+
+        await Collections.events().insert_one(event_doc)
+
+        background_tasks.add_task(
+            forward_to_amplitude,
+            event_id=event_id,
+            user_id=current_user["user_id"],
+            event_type=event.event_type,
+            timestamp=event.timestamp,
+            properties={
+                **event.properties,
+                "session_id": event.session_id,
+                "task_id": event.task_id,
+            },
+        )
+
+    return {
+        "event_ids": event_ids,
+        "count": len(event_ids),
+        "forwarded_to_amplitude": True,
+    }
