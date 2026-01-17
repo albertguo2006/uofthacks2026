@@ -30,6 +30,7 @@ class SearchResult(BaseModel):
 class VideoInDB(BaseModel):
     id: str = Field(alias="_id")
     user_id: str
+    session_id: Optional[str] = None  # Link video to coding session for replay sync
     twelvelabs_index_id: Optional[str] = None
     twelvelabs_video_id: Optional[str] = None
     twelvelabs_task_id: Optional[str] = None
