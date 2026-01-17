@@ -1,8 +1,8 @@
 [
   {
     "job_id": "tier0-landing-page",
-    "title": "Build a Marketing Landing Page",
-    "description": "Create a responsive landing page for a startup's new product launch. Includes hero section, features grid, testimonials, and CTA.",
+    "title": "Junior Frontend Developer",
+    "description": "Build responsive web interfaces for startup clients. Work includes landing pages, component libraries, and responsive design implementation.",
     "company": "StartupCo",
     "tier": 0,
     "target_vector": [0.4, 0.3, 0.5, 0.3, 0.8],
@@ -16,8 +16,8 @@
   },
   {
     "job_id": "tier0-api-endpoint",
-    "title": "Add REST API Endpoint",
-    "description": "Implement a new endpoint for user profile updates with validation and error handling.",
+    "title": "Junior Backend Developer",
+    "description": "Develop and maintain REST APIs for web applications. Implement endpoints, handle validation, and write clean server-side code.",
     "company": "DevAgency",
     "tier": 0,
     "target_vector": [0.5, 0.4, 0.4, 0.4, 0.8],
@@ -31,8 +31,8 @@
   },
   {
     "job_id": "tier1-dashboard-feature",
-    "title": "Build Analytics Dashboard Feature",
-    "description": "Implement interactive charts and data visualization for a SaaS analytics platform. Requires state management and API integration.",
+    "title": "Full Stack Developer",
+    "description": "Build end-to-end features for a SaaS analytics platform. Work across the stack from React frontends to Node.js APIs and database queries.",
     "company": "DataViz Inc",
     "tier": 1,
     "target_vector": [0.6, 0.5, 0.6, 0.5, 0.85],
@@ -43,12 +43,12 @@
     },
     "salary_range": "$70-90k",
     "location": "Remote",
-    "tags": ["frontend", "react", "typescript", "charts"]
+    "tags": ["fullstack", "react", "typescript", "nodejs"]
   },
   {
     "job_id": "tier1-payment-integration",
-    "title": "Integrate Payment Processing",
-    "description": "Add Stripe payment integration with subscription management, webhooks, and error handling.",
+    "title": "Software Engineer - Payments",
+    "description": "Own payment infrastructure including Stripe integration, subscription billing, webhooks, and PCI compliance requirements.",
     "company": "FinanceApp Co",
     "tier": 1,
     "target_vector": [0.5, 0.7, 0.6, 0.5, 0.9],
@@ -63,8 +63,8 @@
   },
   {
     "job_id": "tier1-mobile-feature",
-    "title": "React Native Feature Development",
-    "description": "Build offline-capable features for a mobile app including local storage, sync, and conflict resolution.",
+    "title": "Mobile Developer",
+    "description": "Build cross-platform mobile applications using React Native. Implement offline-first features, local storage, and background sync.",
     "company": "MobileFirst",
     "tier": 1,
     "target_vector": [0.6, 0.6, 0.5, 0.6, 0.85],
@@ -75,12 +75,12 @@
     },
     "salary_range": "$80-100k",
     "location": "Remote",
-    "tags": ["mobile", "react-native", "offline", "sync"]
+    "tags": ["mobile", "react-native", "ios", "android"]
   },
   {
     "job_id": "tier2-refactor-billing",
-    "title": "Refactor Legacy Billing System",
-    "description": "Modernize a monolithic billing service into microservices. Requires careful testing and zero-downtime migration.",
+    "title": "Senior Backend Engineer",
+    "description": "Lead modernization of billing infrastructure from monolith to microservices. Architect scalable solutions with zero-downtime deployments.",
     "company": "EnterpriseTech",
     "tier": 2,
     "target_vector": [0.5, 0.8, 0.8, 0.6, 0.95],
@@ -92,12 +92,12 @@
     },
     "salary_range": "$120-150k",
     "location": "Hybrid - SF",
-    "tags": ["backend", "microservices", "refactoring", "senior"]
+    "tags": ["backend", "microservices", "architecture", "senior"]
   },
   {
     "job_id": "tier2-performance-optimization",
-    "title": "Performance Engineering Lead",
-    "description": "Lead performance optimization initiative for high-traffic e-commerce platform. Profile, identify bottlenecks, and implement solutions.",
+    "title": "Staff Software Engineer",
+    "description": "Drive performance engineering for high-traffic e-commerce platform. Profile systems, identify bottlenecks, and lead optimization initiatives.",
     "company": "ScaleUp Commerce",
     "tier": 2,
     "target_vector": [0.7, 0.8, 0.7, 0.7, 0.9],
@@ -109,12 +109,12 @@
     },
     "salary_range": "$140-170k",
     "location": "Remote",
-    "tags": ["performance", "optimization", "lead", "senior"]
+    "tags": ["performance", "optimization", "staff", "senior"]
   },
   {
     "job_id": "tier2-ml-pipeline",
-    "title": "Build ML Feature Pipeline",
-    "description": "Design and implement real-time feature engineering pipeline for recommendation system. Requires data engineering and ML ops experience.",
+    "title": "Data Engineer",
+    "description": "Design and implement real-time data pipelines for ML systems. Build feature stores, ETL workflows, and streaming infrastructure.",
     "company": "AI Startup",
     "tier": 2,
     "target_vector": [0.6, 0.7, 0.7, 0.8, 0.9],
@@ -125,6 +125,6 @@
     },
     "salary_range": "$150-180k",
     "location": "Remote",
-    "tags": ["ml", "data-engineering", "python", "senior"]
+    "tags": ["data-engineering", "python", "spark", "senior"]
   }
 ]

@@ -47,5 +47,13 @@ class Collections:
         return get_db().chat_messages
 
     @staticmethod
+    def skill_proficiencies():
+        return get_db().skill_proficiencies
+
+    @staticmethod
+    def applications():
+        return get_db().applications
+
+    @staticmethod
     def db():
         return get_db()
