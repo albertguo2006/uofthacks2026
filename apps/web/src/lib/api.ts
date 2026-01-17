@@ -342,6 +342,21 @@ class ApiClient {
   }
 
   async getVideoDetails(videoId: string): Promise<VideoDetails> {
+    if (isDevMode()) {
+      // Find the video in mock data
+      const mockVideo = MOCK_RECRUITER_VIDEOS.find(v => v.video_id === videoId);
+      if (mockVideo) {
+        return {
+          video_id: mockVideo.video_id,
+          status: mockVideo.status,
+          summary: mockVideo.summary,
+          highlights: mockVideo.highlights,
+          communication_analysis: mockVideo.communication_analysis,
+        };
+      }
+      // Default mock
+      return MOCK_VIDEO_DETAILS;
+    }
     return this.get(`/video/${videoId}/details`);
   }
 }
@@ -555,6 +570,45 @@ const MOCK_RECRUITER_VIDEOS = [
     uploaded_by: 'recruiter-001',
   },
 ];
+
+const MOCK_VIDEO_DETAILS: VideoDetails = {
+  video_id: 'video-001',
+  status: 'ready',
+  duration_seconds: 1800,
+  summary: 'The candidate demonstrated excellent communication skills and technical depth during this system design discussion. They showed clear thinking about trade-offs and asked relevant clarifying questions. Their approach to breaking down the problem was methodical, and they handled edge cases well.',
+  highlights: [
+    {
+      category: 'approach',
+      query: 'problem-solving approach',
+      start: 120,
+      end: 180,
+      confidence: 0.92,
+      transcript: 'I would start by understanding the requirements and breaking down the problem into smaller components...',
+    },
+    {
+      category: 'tradeoffs',
+      query: 'discussing tradeoffs',
+      start: 450,
+      end: 520,
+      confidence: 0.88,
+      transcript: 'The main tradeoff here is between latency and consistency. If we prioritize consistency...',
+    },
+    {
+      category: 'debugging',
+      query: 'debugging and fixing errors',
+      start: 780,
+      end: 850,
+      confidence: 0.85,
+      transcript: 'Let me trace through this logic again. I think the issue might be in how we handle the edge case...',
+    },
+  ],
+  communication_analysis: {
+    clarity: { score: 4, reason: 'Explains concepts clearly with good examples and analogies' },
+    confidence: { score: 5, reason: 'Speaks confidently and handles uncertainty well' },
+    collaboration: { score: 4, reason: 'Asks good clarifying questions and thinks out loud' },
+    technical_depth: { score: 4, reason: 'Uses appropriate technical terminology accurately' },
+  },
+};
 
 const MOCK_TIMELINE = {
   session_id: 'dev-session-001',
