@@ -1,6 +1,8 @@
 """
 Backboard.io Multi-Model AI Service + Direct Gemini API
 
+Using the backboard-sdk for proper API integration.
+
 Model routing:
 - Claude for empathetic hints (via Backboard - anthropic/claude-3-haiku)
 - GPT-4o for code analysis (via Backboard - openai/gpt-4o-mini)
@@ -12,8 +14,8 @@ import httpx
 import json
 from typing import Optional
 from config import get_settings
+from backboard import BackboardClient
 
-BACKBOARD_BASE_URL = "https://api.backboard.io/v1"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # ANSI color codes for terminal output
@@ -26,10 +28,14 @@ BLUE = "\033[94m"
 RESET = "\033[0m"
 DIM = "\033[2m"
 
+# Cache for assistants and threads (module-level to persist across requests)
+_assistant_cache: dict[str, str] = {}  # assistant_name -> assistant_id
+_thread_cache: dict[str, str] = {}  # cache_key -> thread_id
+
 
 class BackboardService:
     """
-    Multi-model AI service using Backboard.io for adaptive memory
+    Multi-model AI service using Backboard.io SDK for adaptive memory
     and intelligent model switching.
     """
 
@@ -38,85 +44,115 @@ class BackboardService:
         self.api_key = settings.backboard_api_key
         self.gemini_api_key = settings.gemini_api_key
         self.user_id = user_id
+        self.client = BackboardClient(api_key=self.api_key) if self.api_key else None
         # In-memory conversation history for Gemini (keyed by session)
         self._gemini_history: dict[str, list] = {}
 
-    async def _call_model(
-        self,
-        model: str,
-        messages: list,
-        memory_key: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 500,
-    ) -> str:
-        """
-        Generic model call with optional memory.
-        Memory is keyed per-user to enable personalization.
-        """
-        # Extract model short name for logging
-        model_short = model.split("/")[-1] if "/" in model else model
-        
-        # Log the prompt
-        print(f"\n{CYAN}╭─────────────────────────────────────────────────────────────╮{RESET}")
-        print(f"{CYAN}│ [Backboard] Calling {model_short}{RESET}")
-        print(f"{CYAN}├─────────────────────────────────────────────────────────────┤{RESET}")
-        
-        if memory_key:
-            print(f"{CYAN}│ Memory Key: {self.user_id[:8]}...:{memory_key}{RESET}")
-        
-        for msg in messages:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")[:200]  # Truncate for readability
-            if role == "system":
-                print(f"{MAGENTA}│ [system] {content}...{RESET}" if len(msg.get("content", "")) > 200 else f"{MAGENTA}│ [system] {content}{RESET}")
-            else:
-                print(f"{BLUE}│ [user] {content}...{RESET}" if len(msg.get("content", "")) > 200 else f"{BLUE}│ [user] {content}{RESET}")
-        
-        print(f"{CYAN}╰─────────────────────────────────────────────────────────────╯{RESET}")
-        
-        if not self.api_key:
-            print(f"{YELLOW}[Backboard] Skipped - API key not configured, using fallback{RESET}")
-            return self._fallback_response(messages)
+    async def _get_or_create_assistant(self, name: str, system_prompt: str) -> Optional[str]:
+        """Get or create an assistant by name."""
+        if not self.client:
+            return None
+
+        cache_key = f"{name}"
+        if cache_key in _assistant_cache:
+            return _assistant_cache[cache_key]
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                payload = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                }
+            # SDK uses 'description' for the system prompt
+            assistant = await self.client.create_assistant(
+                name=name,
+                description=system_prompt
+            )
+            assistant_id_str = str(assistant.assistant_id)
+            _assistant_cache[cache_key] = assistant_id_str
+            print(f"{GREEN}[Backboard] Created assistant: {name} ({assistant_id_str[:12]}...){RESET}")
+            return assistant_id_str
+        except Exception as e:
+            print(f"{RED}[Backboard] Failed to create assistant {name}: {e}{RESET}")
+            return None
 
-                # Enable Backboard memory for personalization
-                if memory_key:
-                    payload["memory"] = {
-                        "enabled": True,
-                        "key": f"{self.user_id}:{memory_key}",
-                    }
+    async def _get_or_create_thread(self, assistant_id: str, thread_key: str) -> Optional[str]:
+        """Get or create a thread for a specific context."""
+        if not self.client or not assistant_id:
+            return None
 
-                response = await client.post(
-                    f"{BACKBOARD_BASE_URL}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                response.raise_for_status()
-                result = response.json()["choices"][0]["message"]["content"]
-                
-                print(f"{GREEN}[Backboard] ✓ {model_short} responded ({len(result)} chars){RESET}")
-                print(f"{DIM}[Backboard] Response: {result[:150]}...{RESET}" if len(result) > 150 else f"{DIM}[Backboard] Response: {result}{RESET}")
-                
-                return result
+        cache_key = f"{assistant_id}:{thread_key}"
+        if cache_key in _thread_cache:
+            return _thread_cache[cache_key]
+
+        try:
+            thread = await self.client.create_thread(assistant_id)
+            thread_id_str = str(thread.thread_id)
+            _thread_cache[cache_key] = thread_id_str
+            print(f"{DIM}[Backboard] Created thread for {thread_key[:20]}...{RESET}")
+            return thread_id_str
+        except Exception as e:
+            print(f"{RED}[Backboard] Failed to create thread: {e}{RESET}")
+            return None
+
+    async def _call_model(
+        self,
+        assistant_name: str,
+        system_prompt: str,
+        user_message: str,
+        llm_provider: str = "openai",
+        model_name: str = "gpt-4o-mini",
+        thread_key: Optional[str] = None,
+        use_memory: bool = False,
+    ) -> str:
+        """
+        Generic model call using Backboard SDK.
+        """
+        # Log the prompt
+        print(f"\n{CYAN}╭─────────────────────────────────────────────────────────────╮{RESET}")
+        print(f"{CYAN}│ [Backboard] Calling {llm_provider}/{model_name}{RESET}")
+        print(f"{CYAN}├─────────────────────────────────────────────────────────────┤{RESET}")
+
+        if thread_key:
+            print(f"{CYAN}│ Thread Key: {self.user_id[:8]}...:{thread_key[:20]}...{RESET}")
+
+        print(f"{MAGENTA}│ [system] {system_prompt[:150]}...{RESET}" if len(system_prompt) > 150 else f"{MAGENTA}│ [system] {system_prompt}{RESET}")
+        print(f"{BLUE}│ [user] {user_message[:200]}...{RESET}" if len(user_message) > 200 else f"{BLUE}│ [user] {user_message}{RESET}")
+        print(f"{CYAN}╰─────────────────────────────────────────────────────────────╯{RESET}")
+
+        if not self.client:
+            print(f"{YELLOW}[Backboard] Skipped - API key not configured, using fallback{RESET}")
+            return self._fallback_response([{"content": user_message}])
+
+        try:
+            # Get or create assistant
+            assistant_id = await self._get_or_create_assistant(assistant_name, system_prompt)
+            if not assistant_id:
+                return self._fallback_response([{"content": user_message}])
+
+            # Get or create thread (use user_id + thread_key for uniqueness)
+            actual_thread_key = f"{self.user_id}:{thread_key}" if thread_key else f"{self.user_id}:default"
+            thread_id = await self._get_or_create_thread(assistant_id, actual_thread_key)
+            if not thread_id:
+                return self._fallback_response([{"content": user_message}])
+
+            # Send message
+            response = await self.client.add_message(
+                thread_id=thread_id,
+                content=user_message,
+                llm_provider=llm_provider,
+                model_name=model_name,
+                memory="Auto" if use_memory else None,
+                stream=False
+            )
+
+            result = response.content
+            print(f"{GREEN}[Backboard] ✓ {model_name} responded ({len(result)} chars){RESET}")
+            print(f"{DIM}[Backboard] Response: {result[:150]}...{RESET}" if len(result) > 150 else f"{DIM}[Backboard] Response: {result}{RESET}")
+
+            return result
 
         except Exception as e:
-            print(f"{RED}[Backboard] ✗ Error calling {model_short}: {e}{RESET}")
-            return self._fallback_response(messages)
+            print(f"{RED}[Backboard] ✗ Error calling {model_name}: {e}{RESET}")
+            return self._fallback_response([{"content": user_message}])
 
     def _fallback_response(self, messages: list) -> str:
         """Provide a fallback response when API is unavailable."""
-        # Simple fallback hints
         fallback_hints = [
             "Try breaking down the problem into smaller steps.",
             "Check your variable names and make sure they match what you defined.",
@@ -126,6 +162,16 @@ class BackboardService:
         ]
         import random
         return random.choice(fallback_hints)
+
+    def _strip_markdown_json(self, response: str) -> str:
+        """Strip markdown code blocks from JSON response."""
+        clean = response.strip()
+        if clean.startswith("```"):
+            # Remove opening fence (```json or ```)
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+        if clean.endswith("```"):
+            clean = clean[:-3]
+        return clean.strip()
 
     # =========================================================================
     # GEMINI API - Direct calls (NOT through Backboard)
@@ -143,33 +189,30 @@ class BackboardService:
         Direct call to Gemini API (gemini-2.0-flash).
         Supports conversation history via session_key.
         """
-        # Log the prompt
         print(f"\n{MAGENTA}╭─────────────────────────────────────────────────────────────╮{RESET}")
         print(f"{MAGENTA}│ [Gemini] Direct API Call (gemini-2.5-flash){RESET}")
         print(f"{MAGENTA}├─────────────────────────────────────────────────────────────┤{RESET}")
-        
+
         if session_key:
             history_len = len(self._gemini_history.get(session_key, []))
             print(f"{MAGENTA}│ Session: {session_key[:20]}... (history: {history_len} msgs){RESET}")
-        
+
         if system_instruction:
             print(f"{BLUE}│ [system] {system_instruction[:150]}...{RESET}" if len(system_instruction) > 150 else f"{BLUE}│ [system] {system_instruction}{RESET}")
-        
+
         print(f"{CYAN}│ [user] {prompt[:200]}...{RESET}" if len(prompt) > 200 else f"{CYAN}│ [user] {prompt}{RESET}")
         print(f"{MAGENTA}╰─────────────────────────────────────────────────────────────╯{RESET}")
-        
+
         if not self.gemini_api_key:
             print(f"{YELLOW}[Gemini] Skipped - API key not configured, using fallback{RESET}")
             return self._fallback_response([{"content": prompt}])
 
         try:
-            # Build contents with history if session_key provided
             contents = []
-            
+
             if session_key and session_key in self._gemini_history:
                 contents.extend(self._gemini_history[session_key])
-            
-            # Add current user message
+
             contents.append({
                 "role": "user",
                 "parts": [{"text": prompt}]
@@ -183,7 +226,6 @@ class BackboardService:
                 }
             }
 
-            # Add system instruction if provided
             if system_instruction:
                 payload["systemInstruction"] = {
                     "parts": [{"text": system_instruction}]
@@ -196,19 +238,17 @@ class BackboardService:
                     json=payload,
                 )
                 response.raise_for_status()
-                
+
                 result = response.json()
                 response_text = result["candidates"][0]["content"]["parts"][0]["text"]
-                
+
                 print(f"{GREEN}[Gemini] ✓ Response received ({len(response_text)} chars){RESET}")
                 print(f"{DIM}[Gemini] Response: {response_text[:150]}...{RESET}" if len(response_text) > 150 else f"{DIM}[Gemini] Response: {response_text}{RESET}")
-                
-                # Store conversation history if session_key provided
+
                 if session_key:
                     if session_key not in self._gemini_history:
                         self._gemini_history[session_key] = []
-                    
-                    # Add user message and response to history
+
                     self._gemini_history[session_key].append({
                         "role": "user",
                         "parts": [{"text": prompt}]
@@ -217,11 +257,10 @@ class BackboardService:
                         "role": "model",
                         "parts": [{"text": response_text}]
                     })
-                    
-                    # Keep history limited to last 20 exchanges
+
                     if len(self._gemini_history[session_key]) > 40:
                         self._gemini_history[session_key] = self._gemini_history[session_key][-40:]
-                
+
                 return response_text
 
         except Exception as e:
@@ -243,50 +282,46 @@ class BackboardService:
         Memory: Remembers past hints to avoid repetition.
         """
         print(f"\n{CYAN}[Hint] Generating basic hint (attempt #{attempt_count}){RESET}")
-        return await self._call_model(
-            model="anthropic/claude-3-haiku-20240307",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are an encouraging coding mentor helping a student who is stuck.
+
+        system_prompt = """You are an encouraging coding mentor helping a student who is stuck.
 
 Rules:
 - Give a brief, helpful hint (1-2 sentences max)
 - Don't give away the answer
 - Be encouraging and supportive
 - If you've given similar hints before (check your memory), try a different approach
-- Acknowledge their effort if they've been trying for a while""",
-                },
-                {
-                    "role": "user",
-                    "content": f"""The student's current code:
+- Acknowledge their effort if they've been trying for a while"""
+
+        user_message = f"""The student's current code:
 ```
 {code[:1500]}
 ```
 
 Error/Issue: {error}
 
-This is attempt #{attempt_count}. Please provide a helpful hint.""",
-                },
-            ],
-            memory_key="hints",
-            temperature=0.8,
-            max_tokens=150,
+This is attempt #{attempt_count}. Please provide a helpful hint."""
+
+        return await self._call_model(
+            assistant_name="HintAssistant",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"hints:{self.user_id}",
+            use_memory=True,
         )
 
     async def generate_encouragement(self, context: str) -> str:
         """Generate pure encouragement when user seems frustrated."""
+        system_prompt = "You are a supportive coding mentor. Give a brief (1 sentence) word of encouragement. Be genuine, not cheesy."
+
         return await self._call_model(
-            model="anthropic/claude-3-haiku-20240307",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a supportive coding mentor. Give a brief (1 sentence) word of encouragement. Be genuine, not cheesy.",
-                },
-                {"role": "user", "content": f"Context: {context}"},
-            ],
-            temperature=0.9,
-            max_tokens=50,
+            assistant_name="EncouragementAssistant",
+            system_prompt=system_prompt,
+            user_message=f"Context: {context}",
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"encouragement:{self.user_id}",
         )
 
     # =========================================================================
@@ -302,50 +337,32 @@ This is attempt #{attempt_count}. Please provide a helpful hint.""",
     ) -> dict:
         """
         Generate a personalized hint based on user's error profile.
-
-        Args:
-            code: Current code
-            error: Current error message
-            attempt_count: Number of attempts
-            error_profile: User's error profile from compute_error_profile()
-
-        Returns:
-            {
-                "hint": "The hint text",
-                "personalization_badge": "Based on your syntax error patterns",
-                "hint_style": "example-based"
-            }
         """
         dominant_category = error_profile.get("dominant_category", "logic")
         print(f"\n{MAGENTA}[Hint] Generating PERSONALIZED hint (attempt #{attempt_count}, profile: {dominant_category}){RESET}")
         effective_styles = error_profile.get("effective_hint_styles", ["conceptual"])
         hint_style = effective_styles[0] if effective_styles else "conceptual"
 
-        # Get style-specific system prompt
         system_prompt = self._get_style_prompt(dominant_category, hint_style)
-
-        # Generate personalization badge
         badge = self._get_personalization_badge(dominant_category, error_profile)
 
-        hint = await self._call_model(
-            model="anthropic/claude-3-haiku-20240307",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": f"""The student's current code:
+        user_message = f"""The student's current code:
 ```
 {code[:1500]}
 ```
 
 Error/Issue: {error}
 
-This is attempt #{attempt_count}. Please provide a helpful hint.""",
-                },
-            ],
-            memory_key="hints",
-            temperature=0.8,
-            max_tokens=200,
+This is attempt #{attempt_count}. Please provide a helpful hint."""
+
+        hint = await self._call_model(
+            assistant_name=f"PersonalizedHintAssistant_{dominant_category}",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"personalized_hints:{self.user_id}",
+            use_memory=True,
         )
 
         return {
@@ -445,30 +462,28 @@ Style guidance for runtime issues:
         Use GPT-4o for detailed technical code analysis.
         Returns structured analysis of the error.
         """
-        response = await self._call_model(
-            model="openai/gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """Analyze the code error. Return valid JSON only with this structure:
-{
+        system_prompt = """Analyze the code error. Return valid JSON only with this structure:
+{{
   "error_type": "syntax|runtime|logic|type",
   "root_cause": "brief explanation",
   "affected_lines": "line numbers or description",
   "severity": 1-5,
   "category": "null_reference|off_by_one|type_mismatch|syntax|other"
-}""",
-                },
-                {
-                    "role": "user",
-                    "content": f"Code:\n```\n{code[:2000]}\n```\n\nError: {error}",
-                },
-            ],
-            temperature=0.3,
-            max_tokens=200,
+}}"""
+
+        user_message = f"Code:\n```\n{code[:2000]}\n```\n\nError: {error}"
+
+        response = await self._call_model(
+            assistant_name="CodeAnalysisAssistant",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"code_analysis:{self.user_id}",
         )
+
         try:
-            return json.loads(response)
+            return json.loads(self._strip_markdown_json(response))
         except json.JSONDecodeError:
             return {"error_type": "unknown", "root_cause": response, "severity": 3}
 
@@ -476,20 +491,15 @@ Style guidance for runtime issues:
         """
         Use GPT-4o to suggest a specific fix without giving full solution.
         """
+        system_prompt = "Suggest a specific fix for this code issue. Be concise (2-3 sentences). Point to the exact location and what needs to change, but don't write the full corrected code."
+
         return await self._call_model(
-            model="openai/gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Suggest a specific fix for this code issue. Be concise (2-3 sentences). Point to the exact location and what needs to change, but don't write the full corrected code.",
-                },
-                {
-                    "role": "user",
-                    "content": f"```\n{code[:2000]}\n```\n\nError: {error}",
-                },
-            ],
-            temperature=0.5,
-            max_tokens=150,
+            assistant_name="FixSuggestionAssistant",
+            system_prompt=system_prompt,
+            user_message=f"```\n{code[:2000]}\n```\n\nError: {error}",
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"fix_suggestion:{self.user_id}",
         )
 
     # =========================================================================
@@ -499,7 +509,6 @@ Style guidance for runtime issues:
     async def summarize_radar_profile(self, radar: dict, recent_events: list) -> str:
         """
         Use Gemini (direct API) for structured profile summarization.
-        Uses session key for memory of profile evolution.
         """
         prompt = f"""Summarize this developer's coding style based on their radar profile and recent behavior.
 
@@ -524,7 +533,7 @@ Keep it concise and actionable."""
         )
 
     async def generate_archetype_description(self, archetype: str, radar: dict) -> str:
-        """Generate personalized archetype description based on actual scores. Uses direct Gemini API."""
+        """Generate personalized archetype description based on actual scores."""
         prompt = f"""The developer has been classified as: "{archetype}"
 
 Their radar scores: {json.dumps(radar, indent=2)}
@@ -544,14 +553,10 @@ Write a 2-sentence personalized description of their engineering style that refl
     async def parse_job_requirements(self, job_description: str) -> dict:
         """
         Use Cohere Command for efficient job description parsing.
-        Extracts ideal candidate radar profile from text.
         """
-        response = await self._call_model(
-            model="cohere/command-r",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""Extract the ideal candidate profile from this job description.
+        system_prompt = "You parse job descriptions and extract ideal candidate profiles. Return only valid JSON."
+
+        user_message = f"""Extract the ideal candidate profile from this job description.
 
 Job Description:
 {job_description[:2000]}
@@ -565,14 +570,19 @@ Return valid JSON with scores 0.0-1.0 for each dimension:
   "debugging": 0.X        // Error resolution importance
 }}
 
-Base scores on explicit and implicit requirements in the description.""",
-                }
-            ],
-            temperature=0.3,
-            max_tokens=150,
+Base scores on explicit and implicit requirements in the description."""
+
+        response = await self._call_model(
+            assistant_name="JobParsingAssistant",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"job_parsing:{self.user_id}",
         )
+
         try:
-            return json.loads(response)
+            return json.loads(self._strip_markdown_json(response))
         except json.JSONDecodeError:
             return {
                 "verification": 0.5,
@@ -586,20 +596,19 @@ Base scores on explicit and implicit requirements in the description.""",
         self, candidate_radar: dict, job_radar: dict, fit_score: float
     ) -> str:
         """Explain why a candidate matches (or doesn't match) a job."""
+        system_prompt = "You explain job-candidate fit in concise terms."
+
         return await self._call_model(
-            model="cohere/command-r",
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"""Candidate radar: {json.dumps(candidate_radar)}
+            assistant_name="JobMatchAssistant",
+            system_prompt=system_prompt,
+            user_message=f"""Candidate radar: {json.dumps(candidate_radar)}
 Job requirements: {json.dumps(job_radar)}
 Match score: {fit_score:.0%}
 
 Explain in 1-2 sentences why this candidate does/doesn't match this role. Be specific about which dimensions align or differ.""",
-                }
-            ],
-            temperature=0.5,
-            max_tokens=100,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"job_match:{self.user_id}",
         )
 
     # =========================================================================
@@ -609,26 +618,18 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
     async def adaptive_intervention(self, session_context: dict, error_profile: dict = None) -> dict:
         """
         Intelligently choose intervention type and model based on context.
-        This is the "adaptive" part that makes decisions based on user state.
-
-        Args:
-            session_context: Current session state
-            error_profile: User's historical error profile (optional, for personalization)
         """
         code = session_context.get("code", "")
         last_error = session_context.get("last_error")
         error_streak = session_context.get("error_streak", 0)
         time_stuck_ms = session_context.get("time_stuck_ms", 0)
         attempt_count = session_context.get("attempt_count", 1)
-        
+
         print(f"\n{BLUE}[Intervention] Evaluating... (errors: {error_streak}, stuck: {time_stuck_ms // 1000}s){RESET}")
 
-        # Use personalized hints if error profile is available
         use_personalized = error_profile and error_profile.get("has_data", False)
 
-        # Decision tree for intervention type
         if error_streak >= 3 and last_error:
-            # Technical stuck - use GPT for analysis + Claude for delivery
             analysis = await self.analyze_code_error(code, last_error)
 
             if use_personalized:
@@ -652,8 +653,7 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                     "model_used": ["gpt-4o-mini", "claude-3-haiku"],
                 }
 
-        elif time_stuck_ms > 180000:  # 3+ minutes without progress
-            # Might need encouragement or different approach
+        elif time_stuck_ms > 180000:
             if use_personalized:
                 hint_result = await self.generate_personalized_hint(
                     code,
@@ -689,7 +689,6 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                 }
 
         elif error_streak >= 2:
-            # Early intervention - quick hint
             if use_personalized:
                 hint_result = await self.generate_personalized_hint(
                     code, last_error or "struggling", attempt_count, error_profile
@@ -714,41 +713,6 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
         return {"type": "none"}
 
     # =========================================================================
-    # MEMORY MANAGEMENT
-    # =========================================================================
-
-    async def get_user_memory(self, memory_key: str) -> dict:
-        """Fetch user's adaptive memory from Backboard."""
-        if not self.api_key:
-            return {}
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{BACKBOARD_BASE_URL}/memory/{self.user_id}:{memory_key}",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                )
-                if response.status_code == 200:
-                    return response.json()
-                return {}
-        except Exception:
-            return {}
-
-    async def clear_user_memory(self, memory_key: str):
-        """Clear a specific memory key for the user."""
-        if not self.api_key:
-            return
-
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.delete(
-                    f"{BACKBOARD_BASE_URL}/memory/{self.user_id}:{memory_key}",
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                )
-        except Exception:
-            pass
-
-    # =========================================================================
     # CONTEXTUAL HINTS - Enhanced with code history (Feature 1)
     # =========================================================================
 
@@ -762,39 +726,24 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
     ) -> dict:
         """
         Generate smarter hints based on the user's code history within the session.
-        Uses Claude for empathetic delivery with full context awareness.
-        
-        Args:
-            code_history: List of {code, timestamp, error} entries from this session
-            current_code: The current state of the code
-            current_error: The current error message (if any)
-            task_description: The task the user is working on
-            session_id: For session-scoped memory
         """
         print(f"\n{CYAN}[Hint] Generating CONTEXTUAL hint (history: {len(code_history)} snapshots, session: {session_id[:12]}...){RESET}")
-        
-        # Build code evolution summary
+
         evolution_summary = []
-        for i, entry in enumerate(code_history[-5:]):  # Last 5 snapshots
+        for i, entry in enumerate(code_history[-5:]):
             error_info = f" (Error: {entry.get('error', 'none')[:50]})" if entry.get('error') else ""
             evolution_summary.append(f"Attempt {i+1}: {len(entry.get('code', ''))} chars{error_info}")
-        
+
         evolution_text = "\n".join(evolution_summary) if evolution_summary else "First attempt"
-        
-        # Identify patterns in errors
+
         error_patterns = []
         for entry in code_history:
             if entry.get('error'):
                 error_patterns.append(entry['error'][:100])
-        
+
         repeated_errors = len(error_patterns) != len(set(error_patterns))
-        
-        response = await self._call_model(
-            model="anthropic/claude-3-haiku-20240307",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are an encouraging coding mentor with full context of the student's session.
+
+        system_prompt = """You are an encouraging coding mentor with full context of the student's session.
 
 Rules:
 - Give a brief, helpful hint (2-3 sentences max)
@@ -802,11 +751,9 @@ Rules:
 - Reference their progress if they've been improving
 - If they keep making the same error, suggest a different approach
 - Be encouraging and acknowledge their persistence
-- Use your memory to avoid repeating hints you've already given""",
-                },
-                {
-                    "role": "user",
-                    "content": f"""Task: {task_description[:500]}
+- Use your memory to avoid repeating hints you've already given"""
+
+        user_message = f"""Task: {task_description[:500]}
 
 Code evolution in this session:
 {evolution_text}
@@ -821,14 +768,18 @@ Current error: {current_error or 'No specific error, but tests failing'}
 Has repeated same error: {repeated_errors}
 Total attempts this session: {len(code_history) + 1}
 
-Please provide a contextual hint based on their journey so far.""",
-                },
-            ],
-            memory_key=f"session:{session_id}:hints",
-            temperature=0.8,
-            max_tokens=200,
+Please provide a contextual hint based on their journey so far."""
+
+        response = await self._call_model(
+            assistant_name="ContextualHintAssistant",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"session:{session_id}:hints",
+            use_memory=True,
         )
-        
+
         return {
             "hint": response,
             "context": {
@@ -850,18 +801,9 @@ Please provide a contextual hint based on their journey so far.""",
     ) -> list:
         """
         Rank candidates for a job using GPT-4o for structured analysis.
-        
-        Args:
-            candidates: List of candidate dicts with radar_profile, sessions_completed, etc.
-            job_requirements: Job's target_radar and requirements
-            amplitude_data: Optional per-user analytics from Amplitude
-        
-        Returns:
-            List of candidates with AI scores and explanations
         """
-        # Prepare candidate summaries for the model
         candidate_summaries = []
-        for c in candidates[:20]:  # Limit to 20 candidates per request
+        for c in candidates[:20]:
             summary = {
                 "id": c.get("user_id") or c.get("_id"),
                 "radar": c.get("radar_profile", {}),
@@ -869,19 +811,13 @@ Please provide a contextual hint based on their journey so far.""",
                 "archetype": c.get("archetype"),
                 "integrity": c.get("integrity_score", 0.5),
             }
-            # Add Amplitude data if available
             if amplitude_data and summary["id"] in amplitude_data:
                 user_amp = amplitude_data[summary["id"]]
                 summary["activity_score"] = user_amp.get("activity_score", 0)
                 summary["engagement_trend"] = user_amp.get("trend", "stable")
             candidate_summaries.append(summary)
-        
-        response = await self._call_model(
-            model="openai/gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are an AI hiring assistant. Rank candidates based on job fit.
+
+        system_prompt = """You are an AI hiring assistant. Rank candidates based on job fit.
 
 Return valid JSON array only:
 [
@@ -898,26 +834,27 @@ Score based on:
 - Radar profile alignment with job requirements (50%)
 - Session completion and engagement (20%)
 - Integrity score (15%)
-- Archetype fit (15%)""",
-                },
-                {
-                    "role": "user",
-                    "content": f"""Job Requirements:
+- Archetype fit (15%)"""
+
+        user_message = f"""Job Requirements:
 {json.dumps(job_requirements, indent=2)}
 
 Candidates to rank:
 {json.dumps(candidate_summaries, indent=2)}
 
-Rank all candidates from best to worst fit.""",
-                },
-            ],
-            temperature=0.3,
-            max_tokens=1500,
+Rank all candidates from best to worst fit."""
+
+        response = await self._call_model(
+            assistant_name="CandidateRankingAssistant",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"candidate_ranking:{self.user_id}",
         )
-        
+
         try:
-            rankings = json.loads(response)
-            # Merge rankings back with original candidate data
+            rankings = json.loads(self._strip_markdown_json(response))
             ranking_map = {r["id"]: r for r in rankings}
             for c in candidates:
                 cid = c.get("user_id") or c.get("_id")
@@ -931,13 +868,11 @@ Rank all candidates from best to worst fit.""",
                     c["ai_strengths"] = []
                     c["ai_gaps"] = []
                     c["ai_recommendation"] = "Unable to analyze"
-            
-            # Sort by AI score
+
             candidates.sort(key=lambda x: x.get("ai_score", 0), reverse=True)
             return candidates
-            
+
         except json.JSONDecodeError:
-            # Return candidates with default scores
             for c in candidates:
                 c["ai_score"] = 0.5
                 c["ai_recommendation"] = "Analysis unavailable"
@@ -952,12 +887,7 @@ Rank all candidates from best to worst fit.""",
         """
         Generate detailed AI analysis for a specific candidate-job match.
         """
-        response = await self._call_model(
-            model="openai/gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """Provide a detailed hiring analysis. Return valid JSON:
+        system_prompt = """Provide a detailed hiring analysis. Return valid JSON:
 {
   "overall_score": 0.0-1.0,
   "summary": "2-3 sentence overall assessment",
@@ -972,11 +902,9 @@ Rank all candidates from best to worst fit.""",
   "areas_of_concern": ["concern1"],
   "interview_focus_areas": ["topic1", "topic2"],
   "hiring_recommendation": "strong_hire|hire|maybe|no_hire"
-}""",
-                },
-                {
-                    "role": "user",
-                    "content": f"""Candidate Profile:
+}"""
+
+        user_message = f"""Candidate Profile:
 - Radar: {json.dumps(candidate.get('radar_profile', {}), indent=2)}
 - Archetype: {candidate.get('archetype', 'unknown')}
 - Sessions Completed: {candidate.get('sessions_completed', 0)}
@@ -988,15 +916,19 @@ Job Requirements:
 - Role: {job.get('title', 'Unknown')}
 - Description: {job.get('description', 'N/A')[:500]}
 
-Provide a comprehensive hiring analysis.""",
-                },
-            ],
-            temperature=0.4,
-            max_tokens=800,
+Provide a comprehensive hiring analysis."""
+
+        response = await self._call_model(
+            assistant_name="CandidateFitAnalysisAssistant",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"candidate_fit:{self.user_id}",
         )
-        
+
         try:
-            return json.loads(response)
+            return json.loads(self._strip_markdown_json(response))
         except json.JSONDecodeError:
             return {
                 "overall_score": 0.5,
@@ -1018,14 +950,6 @@ Provide a comprehensive hiring analysis.""",
     ) -> str:
         """
         Interactive task help using Gemini for natural conversation.
-        Memory enabled for conversation history within the session.
-        
-        Args:
-            task: Task details (title, description, test_cases)
-            current_code: User's current code
-            question: User's question
-            session_id: For conversation memory
-            error_context: Optional current error
         """
         task_context = f"""Task: {task.get('title', 'Unknown')}
 Description: {task.get('description', 'N/A')[:800]}

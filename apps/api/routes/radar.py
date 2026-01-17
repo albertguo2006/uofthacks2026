@@ -340,6 +340,20 @@ async def request_contextual_hint(
         "hint_context": hint_result["context"],
         "acknowledged": False,
     })
+
+    # Update session ai_context so hint persists between polls
+    await Collections.sessions().update_one(
+        {"session_id": request.session_id},
+        {
+            "$set": {
+                "ai_context.is_stuck": True,
+                "ai_context.last_hint": hint_result["hint"],
+                "ai_context.hint_category": "contextual",
+                "ai_context.intervention_type": "user_requested",
+                "ai_context.stuck_since": datetime.utcnow(),
+            }
+        },
+    )
     
     # Track to Amplitude
     event_id = str(ObjectId())
