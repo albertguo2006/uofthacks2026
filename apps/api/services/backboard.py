@@ -138,7 +138,7 @@ class BackboardService:
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{GEMINI_API_URL}/gemini-2.0-flash:generateContent?key={self.gemini_api_key}",
+                    f"{GEMINI_API_URL}/gemini-2.5-flash:generateContent?key={self.gemini_api_key}",
                     headers={"Content-Type": "application/json"},
                     json=payload,
                 )

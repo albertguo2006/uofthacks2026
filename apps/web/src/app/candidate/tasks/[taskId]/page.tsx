@@ -7,7 +7,6 @@ import { OutputPanel } from '@/components/sandbox/OutputPanel';
 import { TaskHeader } from '@/components/sandbox/TaskHeader';
 import { HintPanel } from '@/components/sandbox/HintPanel';
 import { TaskHelpChat } from '@/components/sandbox/TaskHelpChat';
-import { RadarChartMini } from '@/components/passport/RadarChart';
 import { LanguageSelector } from '@/components/sandbox/LanguageSelector';
 import { ProctoringModal } from '@/components/proctoring/ProctoringModal';
 import { ProctoringIndicator } from '@/components/proctoring/ProctoringIndicator';
@@ -16,7 +15,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { useProctoring } from '@/hooks/useProctoring';
 import { Task, Language } from '@/types/task';
 import { ViolationType } from '@/types/proctoring';
-import { useSessionIntervention, useRadar } from '@/hooks/useRadar';
+import { useSessionIntervention } from '@/hooks/useRadar';
 import { useSemanticObserver } from '@/hooks/useSemanticObserver';
 import { track } from '@/lib/telemetry';
 import { saveCodeDraft, loadCodeDraft, clearCodeDraft } from '@/lib/codeStorage';
@@ -129,7 +128,6 @@ export default function SandboxPage() {
   );
 
   const [sessionId] = useState(() => crypto.randomUUID());
-  const [showRadar, setShowRadar] = useState(false);
 
   const { run, submit, result, isRunning, isSubmitting } = useCodeExecution({
     taskId,
@@ -140,9 +138,6 @@ export default function SandboxPage() {
   const { intervention, acknowledgeHint, requestContextualHint } = useSessionIntervention(sessionId);
   const [hintContext, setHintContext] = useState<{ attempts?: number; repeated_errors?: boolean; code_history_length?: number } | undefined>();
   const [isRequestingHint, setIsRequestingHint] = useState(false);
-
-  // Radar profile hook (polling every 10 seconds)
-  const { radarProfile } = useRadar(undefined, { pollInterval: 10000 });
 
   // Semantic observer for tracking code patterns
   const {
@@ -357,28 +352,8 @@ export default function SandboxPage() {
                   onChange={handleLanguageChange}
                 />
               )}
-
-              {/* Mini Radar Chart Toggle */}
-              <button
-                onClick={() => setShowRadar(!showRadar)}
-                className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
-                title="Toggle skill radar"
-              >
-                {showRadar ? 'Hide Radar' : 'Show Radar'}
-              </button>
             </div>
           </div>
-
-          {/* Radar Chart (collapsible) */}
-          {showRadar && radarProfile && (
-            <div className="mb-2 p-2 bg-gray-900/50 rounded-lg flex items-center gap-4">
-              <RadarChartMini profile={radarProfile} size={60} />
-              <div className="text-xs text-gray-400">
-                <div className="font-medium text-gray-300 mb-1">Engineering DNA</div>
-                <div>Your coding patterns are being analyzed</div>
-              </div>
-            </div>
-          )}
 
           <div className="flex-1 border rounded-lg overflow-hidden">
             <CodeEditor
