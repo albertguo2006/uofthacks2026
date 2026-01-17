@@ -4,7 +4,7 @@ Backboard.io Multi-Model AI Service
 Provides adaptive memory and intelligent model switching for different tasks:
 - Claude for empathetic hints (anthropic/claude-3-haiku)
 - GPT-4o for code analysis (openai/gpt-4o-mini)
-- Gemini for profile summaries (google/gemini-1.5-flash)
+- Gemini for profile summaries & chat (google/gemini-2.0-flash)
 - Cohere for job parsing (cohere/command-r)
 """
 
@@ -207,7 +207,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint.""",
         Memory: Tracks how profile has evolved over time.
         """
         return await self._call_model(
-            model="google/gemini-1.5-flash",
+            model="google/gemini-2.0-flash",
             messages=[
                 {
                     "role": "user",
@@ -235,7 +235,7 @@ Keep it concise and actionable.""",
     async def generate_archetype_description(self, archetype: str, radar: dict) -> str:
         """Generate personalized archetype description based on actual scores."""
         return await self._call_model(
-            model="google/gemini-1.5-flash",
+            model="google/gemini-2.0-flash",
             messages=[
                 {
                     "role": "user",
@@ -699,7 +699,7 @@ Difficulty: {task.get('difficulty', 'unknown')}"""
         error_info = f"\nCurrent Error: {error_context}" if error_context else ""
 
         return await self._call_model(
-            model="google/gemini-1.5-flash",
+            model="google/gemini-2.0-flash",
             messages=[
                 {
                     "role": "system",
