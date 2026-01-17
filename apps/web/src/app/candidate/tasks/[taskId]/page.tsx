@@ -9,6 +9,7 @@ import { HintPanel } from '@/components/sandbox/HintPanel';
 import { RadarChartMini } from '@/components/passport/RadarChart';
 import { useCodeExecution } from '@/hooks/useCodeExecution';
 import { useTasks } from '@/hooks/useTasks';
+import { Task } from '@/types/task';
 import { useSessionIntervention, useRadar } from '@/hooks/useRadar';
 import { useSemanticObserver } from '@/hooks/useSemanticObserver';
 import { track } from '@/lib/telemetry';
@@ -17,10 +18,19 @@ export default function SandboxPage() {
   const params = useParams();
   const taskId = params.taskId as string;
 
-  const { getTask } = useTasks();
-  const task = getTask(taskId);
+  const { getTask, fetchTask } = useTasks();
+  const [task, setTask] = useState<Task | undefined>(getTask(taskId));
 
   const [code, setCode] = useState('');
+
+  // Fetch full task details on mount
+  useEffect(() => {
+    fetchTask(taskId).then((fullTask) => {
+      if (fullTask) {
+        setTask(fullTask);
+      }
+    });
+  }, [taskId, fetchTask]);
   const [sessionId] = useState(() => crypto.randomUUID());
   const [showRadar, setShowRadar] = useState(false);
 
@@ -124,7 +134,7 @@ export default function SandboxPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
+    <div className="min-h-[calc(100vh-8rem)] flex flex-col pb-8">
       <TaskHeader task={task} />
 
       {/* AI Hint Panel */}
@@ -138,8 +148,8 @@ export default function SandboxPage() {
         </div>
       )}
 
-      <div className="flex-1 grid lg:grid-cols-2 gap-4 mt-4">
-        <div className="flex flex-col">
+      <div className="flex-1 grid lg:grid-cols-2 gap-6 mt-6 min-h-[500px]">
+        <div className="flex flex-col min-h-[400px]">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">Code Editor</span>
             <div className="flex items-center gap-3">
@@ -178,7 +188,7 @@ export default function SandboxPage() {
           </div>
         </div>
 
-        <div className="flex flex-col">
+        <div className="flex flex-col min-h-[400px]">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">Output</span>
             <div className="flex gap-2">

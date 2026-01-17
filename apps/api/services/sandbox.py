@@ -272,6 +272,218 @@ console.log(JSON.stringify(result));
             finally:
                 os.unlink(temp_file)
 
+        elif language == "cpp":
+            # C++ execution
+            wrapper = f'''
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <vector>
+#include <map>
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+
+std::string trim(const std::string& s) {{
+    size_t start = s.find_first_not_of(" \\t\\n\\r");
+    size_t end = s.find_last_not_of(" \\t\\n\\r");
+    return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+}}
+
+{code}
+
+int main(int argc, char* argv[]) {{
+    std::string input_json = argv[1];
+    auto result = solution(input_json);
+    std::cout << result << std::endl;
+    return 0;
+}}
+'''
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
+                f.write(wrapper)
+                src_file = f.name
+            exe_file = src_file.replace('.cpp', '')
+
+            try:
+                # Compile
+                proc = await asyncio.create_subprocess_exec(
+                    'g++', '-std=c++17', '-O2', '-o', exe_file, src_file,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout_seconds
+                )
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+
+                if proc.returncode != 0:
+                    return {
+                        "passed": False,
+                        "output": None,
+                        "time_ms": elapsed_ms,
+                        "error": f"Compilation failed: {{stderr.decode()}}",
+                        "stdout": stdout.decode(),
+                        "stderr": stderr.decode(),
+                    }
+
+                # Run
+                proc = await asyncio.create_subprocess_exec(
+                    exe_file, json.dumps(test_input),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout_seconds
+                )
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+
+                if proc.returncode != 0:
+                    return {
+                        "passed": False,
+                        "output": None,
+                        "time_ms": elapsed_ms,
+                        "error": stderr.decode(),
+                        "stdout": stdout.decode(),
+                        "stderr": stderr.decode(),
+                    }
+
+                output_str = stdout.decode().strip()
+                try:
+                    output = json.loads(output_str)
+                except json.JSONDecodeError:
+                    output = output_str
+
+                passed = compare_outputs(output, expected_output)
+
+                return {
+                    "passed": passed,
+                    "output": output,
+                    "time_ms": elapsed_ms,
+                    "stdout": "",
+                    "stderr": stderr.decode(),
+                }
+
+            finally:
+                try:
+                    os.unlink(src_file)
+                except:
+                    pass
+                try:
+                    os.unlink(exe_file)
+                except:
+                    pass
+
+        elif language == "java":
+            # Java execution
+            wrapper = f'''
+import java.util.*;
+
+{code}
+
+class Main {{
+    public static void main(String[] args) {{
+        try {{
+            String inputJson = args[0];
+            Solution sol = new Solution();
+            Object result = sol.solve(inputJson);
+            if (result == null) {{
+                System.out.println("null");
+            }} else if (result instanceof String) {{
+                System.out.println("\\"" + result + "\\"");
+            }} else {{
+                System.out.println(result);
+            }}
+        }} catch (Exception e) {{
+            System.err.println("Error: " + e.getMessage());
+            e.printStackTrace();
+        }}
+    }}
+}}
+'''
+
+            temp_dir = tempfile.mkdtemp()
+            src_file = os.path.join(temp_dir, "Main.java")
+
+            try:
+                with open(src_file, 'w') as f:
+                    f.write(wrapper)
+
+                # Compile
+                proc = await asyncio.create_subprocess_exec(
+                    'javac', src_file,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=temp_dir,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout_seconds
+                )
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+
+                if proc.returncode != 0:
+                    return {
+                        "passed": False,
+                        "output": None,
+                        "time_ms": elapsed_ms,
+                        "error": f"Compilation failed: {{stderr.decode()}}",
+                        "stdout": stdout.decode(),
+                        "stderr": stderr.decode(),
+                    }
+
+                # Run
+                proc = await asyncio.create_subprocess_exec(
+                    'java', '-cp', temp_dir, 'Main', json.dumps(test_input),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=temp_dir,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout_seconds
+                )
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+
+                if proc.returncode != 0:
+                    return {
+                        "passed": False,
+                        "output": None,
+                        "time_ms": elapsed_ms,
+                        "error": stderr.decode(),
+                        "stdout": stdout.decode(),
+                        "stderr": stderr.decode(),
+                    }
+
+                output_str = stdout.decode().strip()
+                try:
+                    output = json.loads(output_str)
+                except json.JSONDecodeError:
+                    output = output_str
+
+                passed = compare_outputs(output, expected_output)
+
+                return {
+                    "passed": passed,
+                    "output": output,
+                    "time_ms": elapsed_ms,
+                    "stdout": "",
+                    "stderr": stderr.decode(),
+                }
+
+            finally:
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+
         else:
             return {
                 "passed": False,

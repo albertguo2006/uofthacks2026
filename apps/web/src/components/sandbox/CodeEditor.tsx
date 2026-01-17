@@ -88,6 +88,8 @@ export function CodeEditor({
     javascript: 'javascript',
     typescript: 'typescript',
     python: 'python',
+    cpp: 'cpp',
+    java: 'java',
   };
 
   return (

@@ -4,7 +4,7 @@ export interface Task {
   description: string;
   difficulty: 'easy' | 'medium' | 'hard';
   category: 'bugfix' | 'refactor' | 'feature' | 'optimization';
-  language: 'javascript' | 'typescript' | 'python';
+  language: 'javascript' | 'typescript' | 'python' | 'cpp' | 'java';
   starter_code: string;
   test_cases: TestCase[];
   time_limit_seconds: number;
@@ -20,6 +20,7 @@ export interface TestResult {
   test_case: number;
   passed: boolean;
   output?: any;
+  expected?: any;
   time_ms: number;
   error?: string;
 }
@@ -31,4 +32,13 @@ export interface RunResult {
   total_time_ms: number;
   stdout: string;
   stderr: string;
+}
+
+export interface SubmitResult {
+  submitted: boolean;
+  passed: boolean;
+  score: number;
+  passport_updated: boolean;
+  new_archetype?: string;
+  jobs_unlocked: number;
 }

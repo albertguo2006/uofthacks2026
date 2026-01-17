@@ -8,6 +8,8 @@ from typing import Any
 from languages.python_runner import run_python
 from languages.javascript_runner import run_javascript
 from languages.typescript_runner import run_typescript
+from languages.cpp_runner import run_cpp
+from languages.java_runner import run_java
 
 SANDBOX_DIR = "/tmp/sandbox"
 
@@ -32,6 +34,10 @@ async def execute_code(
             result = await run_javascript(code, input_data, timeout)
         elif language == "typescript":
             result = await run_typescript(code, input_data, timeout)
+        elif language == "cpp":
+            result = await run_cpp(code, input_data, timeout)
+        elif language == "java":
+            result = await run_java(code, input_data, timeout)
         else:
             return {
                 "output": None,

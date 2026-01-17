@@ -1,6 +1,7 @@
 'use client';
 
 import { Task } from '@/types/task';
+import ReactMarkdown from 'react-markdown';
 
 interface TaskHeaderProps {
   task: Task;
@@ -36,10 +37,10 @@ export function TaskHeader({ task }: TaskHeaderProps) {
       </div>
 
       <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
-        <details>
-          <summary className="cursor-pointer font-medium">View Description</summary>
+        <details open>
+          <summary className="cursor-pointer font-medium">Problem Description</summary>
           <div className="mt-2 prose dark:prose-invert prose-sm max-w-none">
-            {task.description}
+            <ReactMarkdown>{task.description}</ReactMarkdown>
           </div>
         </details>
       </div>

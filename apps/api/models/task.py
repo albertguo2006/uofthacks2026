@@ -15,7 +15,7 @@ class Task(BaseModel):
     description: str
     difficulty: str = Field(pattern="^(easy|medium|hard)$")
     category: str = Field(pattern="^(bugfix|refactor|feature|optimization)$")
-    language: str = Field(pattern="^(python|javascript|typescript)$")
+    language: str = Field(pattern="^(python|javascript|typescript|cpp|java)$")
     starter_code: str
     solution_code: Optional[str] = None
     test_cases: list[TestCase]

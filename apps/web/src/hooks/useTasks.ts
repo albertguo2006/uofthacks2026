@@ -10,6 +10,7 @@ interface TasksResponse {
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [fullTasks, setFullTasks] = useState<Record<string, Task>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,10 +32,27 @@ export function useTasks() {
 
   const getTask = useCallback(
     (taskId: string): Task | undefined => {
-      return tasks.find((t) => t.task_id === taskId);
+      // Return full task if available, otherwise return from list
+      return fullTasks[taskId] || tasks.find((t) => t.task_id === taskId);
     },
-    [tasks]
+    [tasks, fullTasks]
   );
+
+  const fetchTask = useCallback(async (taskId: string): Promise<Task | null> => {
+    // Return cached full task if available
+    if (fullTasks[taskId]) {
+      return fullTasks[taskId];
+    }
+
+    try {
+      const task = await api.get<Task>(`/tasks/${taskId}`);
+      setFullTasks((prev) => ({ ...prev, [taskId]: task }));
+      return task;
+    } catch (err) {
+      setError('Failed to fetch task');
+      return null;
+    }
+  }, [fullTasks]);
 
   return {
     tasks,
@@ -42,5 +60,6 @@ export function useTasks() {
     error,
     refetch: fetchTasks,
     getTask,
+    fetchTask,
   };
 }

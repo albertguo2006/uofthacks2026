@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
-import { RunResult } from '@/types/task';
+import { RunResult, SubmitResult } from '@/types/task';
 import { track } from '@/lib/telemetry';
 
 interface UseCodeExecutionOptions {
@@ -10,14 +10,12 @@ interface UseCodeExecutionOptions {
   sessionId: string;
 }
 
-interface SubmitResponse extends RunResult {
-  passport_updated: boolean;
-  new_archetype?: string;
-  jobs_unlocked: number;
-}
+export type ExecutionResult =
+  | { type: 'run'; data: RunResult }
+  | { type: 'submit'; data: SubmitResult };
 
 export function useCodeExecution({ taskId, sessionId }: UseCodeExecutionOptions) {
-  const [result, setResult] = useState<RunResult | null>(null);
+  const [result, setResult] = useState<ExecutionResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,7 +29,7 @@ export function useCodeExecution({ taskId, sessionId }: UseCodeExecutionOptions)
           code,
         });
 
-        setResult(response);
+        setResult({ type: 'run', data: response });
 
         // Track the run attempt
         track('run_attempted', {
@@ -62,23 +60,23 @@ export function useCodeExecution({ taskId, sessionId }: UseCodeExecutionOptions)
   );
 
   const submit = useCallback(
-    async (code: string): Promise<SubmitResponse> => {
+    async (code: string): Promise<SubmitResult> => {
       setIsSubmitting(true);
 
       try {
-        const response = await api.post<SubmitResponse>(`/tasks/${taskId}/submit`, {
+        const response = await api.post<SubmitResult>(`/tasks/${taskId}/submit`, {
           session_id: sessionId,
           code,
         });
 
-        setResult(response);
+        setResult({ type: 'submit', data: response });
 
         // Track submission
         track('task_submitted', {
           session_id: sessionId,
           task_id: taskId,
-          passed: response.all_passed,
-          score: response.all_passed ? 100 : 0,
+          passed: response.passed,
+          score: response.score,
         });
 
         return response;
