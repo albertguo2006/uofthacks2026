@@ -15,7 +15,7 @@ export default function RecruiterDashboard() {
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Link
           href="/recruiter/jobs"
-          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow border-2 border-primary-500"
+          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 border-2 border-primary-500 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
         >
           <h3 className="text-lg font-semibold">My Job Postings</h3>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
@@ -25,7 +25,7 @@ export default function RecruiterDashboard() {
 
         <Link
           href="/recruiter/candidates"
-          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
         >
           <h3 className="text-lg font-semibold">Browse Candidates</h3>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
@@ -35,7 +35,7 @@ export default function RecruiterDashboard() {
 
         <Link
           href="/recruiter/candidates?archetype=careful_tester"
-          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
         >
           <h3 className="text-lg font-semibold">By Archetype</h3>
           <p className="text-gray-600 dark:text-gray-300 mt-2">
@@ -45,7 +45,7 @@ export default function RecruiterDashboard() {
 
         <Link
           href="/recruiter/security"
-          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
         >
           <h3 className="text-lg font-semibold">Security & Privacy</h3>
           <p className="text-gray-600 dark:text-gray-300 mt-2">

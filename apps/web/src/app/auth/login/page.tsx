@@ -16,7 +16,6 @@ export default function LoginPage() {
         connectionDistance={150}
         cursorInfluenceRadius={150}
         cursorRepelStrength={0.25}
-        cursorTrailDelay={0.05}
       />
       <div className="min-h-screen flex items-center justify-center p-4 relative z-10">
         {/* Frosted glass window */}

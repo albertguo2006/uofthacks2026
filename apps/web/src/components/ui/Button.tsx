@@ -19,10 +19,10 @@ export function Button({
   ...props
 }: ButtonProps) {
   const variants = {
-    primary: 'bg-primary-600 text-white hover:bg-primary-700',
-    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-slate-700 dark:text-white',
-    outline: 'border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700',
-    ghost: 'hover:bg-gray-100 dark:hover:bg-slate-700',
+    primary: 'bg-primary-600 text-white',
+    secondary: 'bg-gray-200 text-gray-900 dark:bg-slate-700 dark:text-white',
+    outline: 'border border-gray-300 dark:border-slate-600',
+    ghost: '',
   };
 
   const sizes = {
@@ -34,7 +34,8 @@ export function Button({
   return (
     <button
       className={cn(
-        'rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+        'rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
+        'hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50',
         variants[variant],
         sizes[size],
         className

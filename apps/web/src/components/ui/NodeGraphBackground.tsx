@@ -27,7 +27,7 @@ export default function NodeGraphBackground({
   edgeColor = 'rgba(55, 183, 241, 0.2)',
   cursorInfluenceRadius = 150,
   cursorRepelStrength = 0.25,
-  cursorTrailDelay = 0.05,
+  cursorTrailDelay = 0.15,
 }: NodeGraphBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);

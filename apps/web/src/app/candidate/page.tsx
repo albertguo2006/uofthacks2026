@@ -14,7 +14,7 @@ export default function CandidateDashboard() {
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <Link
           href="/candidate/tasks"
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
         >
           Start a Task
         </Link>

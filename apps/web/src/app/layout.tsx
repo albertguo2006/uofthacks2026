@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import dynamic from 'next/dynamic';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
+
+// Dynamically import GrainOverlay to avoid SSR issues
+const GrainOverlay = dynamic(() => import('@/components/ui/GrainOverlay'), { ssr: false });
 
 export const metadata: Metadata = {
   title: 'Simply Authentic',
@@ -20,6 +24,7 @@ export default function RootLayout({
         <main className="min-h-screen">
           {children}
         </main>
+        <GrainOverlay />
       </body>
     </html>
   );

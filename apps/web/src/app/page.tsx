@@ -17,7 +17,6 @@ export default function Home() {
         connectionDistance={150}
         cursorInfluenceRadius={150}
         cursorRepelStrength={0.25}
-        cursorTrailDelay={0.05}
       />
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-8">
         <div className="max-w-4xl mx-auto text-center">
@@ -33,13 +32,13 @@ export default function Home() {
           <div className="flex gap-4 justify-center mb-12">
             <Link
               href="/auth/login"
-              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              className="px-6 py-3 bg-primary-600 text-white rounded-lg transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
             >
               Sign In
             </Link>
             <Link
               href="/auth/register"
-              className="px-6 py-3 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors"
+              className="px-6 py-3 border border-primary-600 text-primary-600 rounded-lg transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
             >
               Get Started
             </Link>
