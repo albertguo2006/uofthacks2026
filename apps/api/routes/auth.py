@@ -109,17 +109,6 @@ async def login(credentials: LoginRequest):
     )
 
 
-@router.get("/me")
-async def get_current_user_info(current_user: dict = None):
-    """Get current user information."""
-    from middleware.auth import get_current_user
-    from fastapi import Depends
-
-    # This endpoint needs the dependency injected at runtime
-    pass
-
-
-# Re-create the endpoint with proper dependency
 from middleware.auth import get_current_user
 from fastapi import Depends
 
