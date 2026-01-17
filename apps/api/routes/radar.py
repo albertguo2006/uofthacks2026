@@ -19,6 +19,7 @@ from db.collections import Collections
 from services.ai_worker import acknowledge_intervention, track_intervention_effectiveness
 from services.backboard import BackboardService
 from services.amplitude import forward_to_amplitude
+from services.user_error_profile import compute_error_profile, get_error_profile_summary
 
 router = APIRouter()
 
@@ -144,6 +145,48 @@ async def get_my_radar_profile(
     )
 
 
+# =========================================================================
+# ERROR PROFILE - User's historical error patterns (Adaptive Hints Feature)
+# =========================================================================
+
+
+class ErrorProfileResponse(BaseModel):
+    dominant_category: str
+    category_distribution: dict
+    total_errors: int
+    recent_trend: str
+    effective_hint_styles: list
+    has_data: bool
+    summary: str
+
+
+@router.get("/me/error-profile", response_model=ErrorProfileResponse)
+async def get_my_error_profile(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get current user's error profile for transparency.
+    Shows what error patterns have been detected and how hints are being personalized.
+    """
+    user_id = current_user["user_id"]
+
+    # Compute error profile
+    profile = await compute_error_profile(user_id)
+
+    # Get human-readable summary
+    summary = await get_error_profile_summary(user_id)
+
+    return ErrorProfileResponse(
+        dominant_category=profile.get("dominant_category", "logic"),
+        category_distribution=profile.get("category_distribution", {}),
+        total_errors=profile.get("total_errors", 0),
+        recent_trend=profile.get("recent_trend", "stable"),
+        effective_hint_styles=profile.get("effective_hint_styles", []),
+        has_data=profile.get("has_data", False),
+        summary=summary,
+    )
+
+
 @router.post("/intervention/acknowledge")
 async def acknowledge_hint(
     request: AcknowledgeRequest,
@@ -213,6 +256,8 @@ async def get_session_intervention(
             "triggered_at": ai_context.get("stuck_since"),
             "analysis": ai_context.get("analysis"),
             "models_used": ai_context.get("models_used", []),
+            "personalization_badge": ai_context.get("personalization_badge"),
+            "hint_style": ai_context.get("hint_style"),
         }
     }
 

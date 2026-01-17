@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
+from pydantic import BaseModel
 from datetime import datetime
 from bson import ObjectId
 
@@ -16,6 +17,7 @@ from models.task import (
 from services.sandbox import execute_code
 from services.amplitude import forward_to_amplitude
 from services.skillgraph import update_passport_after_submit
+from services.task_recommender import get_recommended_tasks
 
 router = APIRouter()
 
@@ -73,6 +75,69 @@ async def list_tasks(current_user: dict = Depends(get_current_user)):
         )
 
     return TasksResponse(tasks=tasks)
+
+
+# =========================================================================
+# RECOMMENDED TASKS - Personalized task recommendations
+# =========================================================================
+
+
+class RecommendedTask(BaseModel):
+    task: TaskSummary
+    reason: str
+    reason_type: str  # "weak_area" | "archetype_match" | "confidence_builder" | "error_pattern"
+    relevance_score: float
+
+
+class RecommendedTasksResponse(BaseModel):
+    recommendations: list[RecommendedTask]
+    personalization_summary: str
+
+
+@router.get("/recommended", response_model=RecommendedTasksResponse)
+async def get_recommended(
+    limit: int = 5,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get personalized task recommendations based on user's profile.
+
+    Recommendations are based on:
+    - Weak areas in radar profile
+    - Error patterns from history
+    - Archetype matching
+    """
+    result = await get_recommended_tasks(
+        user_id=current_user["user_id"],
+        limit=limit
+    )
+
+    recommendations = []
+    for rec in result.get("recommendations", []):
+        task_data = rec["task"]
+        recommendations.append(
+            RecommendedTask(
+                task=TaskSummary(
+                    task_id=task_data["task_id"],
+                    title=task_data["title"],
+                    description=task_data["description"],
+                    difficulty=task_data["difficulty"],
+                    category=task_data["category"],
+                    languages=task_data.get("languages", []),
+                    estimated_minutes=task_data.get("estimated_minutes", 15),
+                    proctored=task_data.get("proctored", False),
+                    tags=task_data.get("tags", []),
+                ),
+                reason=rec["reason"],
+                reason_type=rec["reason_type"],
+                relevance_score=rec["relevance_score"],
+            )
+        )
+
+    return RecommendedTasksResponse(
+        recommendations=recommendations,
+        personalization_summary=result.get("personalization_summary", ""),
+    )
 
 
 @router.get("/{task_id}", response_model=Task)

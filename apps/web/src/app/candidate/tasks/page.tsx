@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTasks } from '@/hooks/useTasks';
 import { ProctoredBadge } from '@/components/ui/ProctoredBadge';
 import { TopicTag } from '@/components/ui/TopicTag';
+import { RecommendedTasksSection } from '@/components/tasks/RecommendedTasksSection';
 
 export default function TasksPage() {
   const { tasks, isLoading } = useTasks();
@@ -22,6 +23,9 @@ export default function TasksPage() {
           Complete tasks to build your Skill Identity and unlock jobs
         </p>
       </div>
+
+      {/* Recommended Tasks Section */}
+      <RecommendedTasksSection />
 
       {isLoading ? (
         <div className="grid gap-4">

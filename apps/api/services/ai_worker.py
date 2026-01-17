@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from db.collections import Collections
 from services.backboard import BackboardService
+from services.user_error_profile import compute_error_profile
 from config import get_settings
 
 
@@ -70,8 +71,12 @@ async def trigger_analysis(session_id: str, user_id: str):
     if not should_intervene:
         return
 
+    # Fetch user's error profile for personalized hints
+    error_profile = await compute_error_profile(user_id)
+
     # Adaptive intervention - Backboard chooses the right model(s)
-    intervention = await backboard.adaptive_intervention(session_context)
+    # Pass error profile for personalized hint generation
+    intervention = await backboard.adaptive_intervention(session_context, error_profile)
 
     if intervention["type"] != "none":
         # Update session with intervention
@@ -85,6 +90,8 @@ async def trigger_analysis(session_id: str, user_id: str):
                     "ai_context.models_used": intervention.get("model_used", []),
                     "ai_context.analysis": intervention.get("analysis"),
                     "ai_context.stuck_since": datetime.utcnow(),
+                    "ai_context.personalization_badge": intervention.get("personalization_badge"),
+                    "ai_context.hint_style": intervention.get("hint_style"),
                 },
                 "$inc": {"ai_context.intervention_count": 1},
             },
@@ -103,6 +110,8 @@ async def trigger_analysis(session_id: str, user_id: str):
                 "hint_text": intervention.get("hint"),
                 "hint_category": categorize_hint(intervention),
                 "analysis": intervention.get("analysis"),
+                "personalization_badge": intervention.get("personalization_badge"),
+                "hint_style": intervention.get("hint_style"),
                 "acknowledged": False,
                 "code_changed_after": False,
                 "resolved_issue": False,

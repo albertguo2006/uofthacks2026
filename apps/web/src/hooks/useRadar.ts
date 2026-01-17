@@ -23,6 +23,8 @@ export interface Intervention {
   intervention_type?: string;
   session_id: string;
   triggered_at?: string;
+  personalization_badge?: string;
+  hint_style?: string;
 }
 
 export interface RadarResponse {
