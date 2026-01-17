@@ -1,21 +1,32 @@
-# UofTHacks 2026 - Amplitude Technical Challenge
+# UofTHacks 2026 - SkillPulse Design Plan
 
-**Concept:** A self-improving recruitment platform using Behavioral Analytics & AI.
+**Concept:** A self-improving AI-powered technical interview & OA platform using Behavioral Analytics.
 
 ---
 
 ## 1. Executive Summary
 
-**SkillPulse** is an AI-powered technical interview platform that moves beyond binary "Pass/Fail" metrics. It treats the coding interview as a data stream, analyzing **how** a candidate engineers a solution (testing habits, debugging efficiency, optimization patterns), rather than just the final output.
+**SkillPulse** is an AI-powered technical interview and online assessment (OA) platform that moves beyond binary "Pass/Fail" metrics. It treats the coding interview as a data stream, analyzing **how** a candidate engineers a solution (testing habits, debugging efficiency, optimization patterns), rather than just the final output.
 
-### The “Amplitude Loop” (Data → Insight → Action)
+### The "Amplitude Loop" (Data → Insight → Action)
 
 1. **Data:** Track granular **semantic events** (e.g., `test_case_added`, `refactor_start`) instead of just keystrokes.
 2. **Insight:** An asynchronous AI Worker analyzes these patterns to build a live **Engineering DNA Radar Chart**.
 3. **Action:**
-
    * **Self-Improving Candidate Experience:** Detect frustration and dynamically intervene with hints to prevent churn.
    * **Smart Employer Matching:** Match candidates to jobs using vector similarity on behavioral profiles, not just keywords.
+
+### Relationship to Existing Implementation
+
+This plan builds on the existing **Proof of Skill** codebase which has already implemented:
+- FastAPI backend with auth, tasks, events, passports, jobs routes
+- Next.js frontend with Monaco editor and telemetry
+- Sandbox runner for secure code execution
+- MongoDB Atlas integration
+- Amplitude event forwarding
+- Skill vector/passport system (maps to "Engineering DNA Radar")
+
+**New Focus:** Adding AI-powered real-time analysis, frustration detection, and dynamic hint generation.
 
 ---
 
@@ -23,20 +34,57 @@
 
 ### Tech Stack
 
-* **Frontend:** Next.js (React), Tailwind CSS, Monaco Editor, Recharts
-* **Backend API:** Node.js (Express)
-* **Database:** MongoDB Atlas (document store for flexible event schemas)
-* **Async Queue:** BullMQ (Redis)
-* **AI Engine:** OpenAI GPT-4o (via LangChain or direct API)
-* **Code Execution:** Piston API (public sandbox)
-* **Analytics:** Amplitude Browser SDK (source of truth)
+* **Frontend:** Next.js 14 (React), Tailwind CSS, Monaco Editor, Recharts ✅ *Implemented*
+* **Backend API:** FastAPI (Python 3.11+) ✅ *Implemented*
+* **Database:** MongoDB Atlas ✅ *Implemented*
+* **Async Queue:** Python asyncio + background tasks (or Redis/Celery for scale)
+* **AI Engine:** OpenAI GPT-4o / Claude API (via httpx or official SDK)
+* **Code Execution:** Custom Docker sandbox runner ✅ *Implemented*
+* **Analytics:** Amplitude HTTP API ✅ *Implemented*
 
 ### Architecture Flow
 
-1. **Frontend (Next.js)** captures events
-2. **API Gateway** ingests events → **MongoDB** (log) + **Redis** (queue)
-3. **AI Worker** processes queue → updates **User Profile** (radar)
-4. **Frontend** polls for radar updates + AI interventions (hints)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│   Next.js 14 Web App                                                        │
+│   ├── Monaco Editor (captures semantic events)                              │
+│   ├── Engineering DNA Radar (Recharts visualization)                        │
+│   └── AI Hint Panel (receives interventions)                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+              │ POST /track (events)              │ GET /radar (polling)
+              ▼                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              API LAYER (FastAPI)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────────────┐  │
+│   │   /track    │  │   /radar    │  │   /tasks    │  │   /ai/intervene   │  │
+│   │   Events    │  │   Profile   │  │  Execution  │  │   Hint Generator  │  │
+│   └──────┬──────┘  └─────────────┘  └─────────────┘  └───────────────────┘  │
+│          │                                                                   │
+│          ▼                                                                   │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                    Background AI Worker                              │   │
+│   │   • Consumes event batches                                          │   │
+│   │   • Calls LLM for pattern analysis                                  │   │
+│   │   • Updates radar_profile scores                                    │   │
+│   │   • Triggers interventions when stuck detected                      │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+              │                         │
+              ▼                         ▼
+┌───────────────────────┐    ┌─────────────────────────────────────────────────┐
+│      Amplitude        │    │                  MongoDB Atlas                   │
+│   (Analytics SaaS)    │    │   users, events, sessions, tasks, jobs          │
+└───────────────────────┘    └─────────────────────────────────────────────────┘
+```
+
+**Data Flow:**
+1. **Frontend (Next.js)** captures semantic events via Monaco hooks
+2. **POST /track** ingests events → stored in MongoDB + forwarded to Amplitude
+3. **AI Worker** (background task) processes recent events → calls LLM → updates radar_profile
+4. **Frontend** polls `/radar/{userId}` for updated scores + intervention hints
 
 ---
 
