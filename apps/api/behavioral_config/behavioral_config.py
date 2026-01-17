@@ -4,7 +4,7 @@ Phase 1: Settings and thresholds for suspicious behavior detection
 """
 
 from typing import List, Dict
-from apps.api.models.behavioral_analysis import BehaviorType, SeverityLevel
+from models.behavioral_analysis import BehaviorType, SeverityLevel
 
 
 class BehavioralAnalysisConfig:
