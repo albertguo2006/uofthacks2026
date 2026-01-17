@@ -1,4 +1,4 @@
-from . import auth, passkey, track, tasks, jobs, passport, video, radar, proctoring, proctoring_analysis, analytics, chat, recruiter, applications
+from . import auth, passkey, track, tasks, jobs, passport, video, radar, proctoring, proctoring_analysis, analytics, chat, recruiter, applications, replay
 
 __all__ = [
     "auth",
@@ -15,4 +15,5 @@ __all__ = [
     "chat",
     "recruiter",
     "applications",
+    "replay",
 ]
