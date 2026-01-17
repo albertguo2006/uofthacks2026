@@ -191,8 +191,24 @@ async def get_user_sessions(
             "status": "ready"
         })
 
-        # Get code history length
+        # Get code history and final code
         code_history = session.get("code_history", [])
+        final_code = None
+        if code_history:
+            final_code = code_history[-1].get("code")
+
+        # Check if session is proctored (has linked ProctoringSession)
+        proctoring = await Collections.proctoring_sessions().find_one({
+            "session_id": session_id
+        })
+        is_proctored = proctoring is not None
+
+        # Generate brief insights summary for proctored sessions
+        insights_summary = None
+        if is_proctored:
+            service = ReplayService(user_id)
+            insights = await service.generate_quick_insights(session_id)
+            insights_summary = insights.summary
 
         result.append({
             "session_id": session_id,
@@ -204,6 +220,9 @@ async def get_user_sessions(
             "code_snapshots": len(code_history),
             "has_video": video is not None,
             "video_id": str(video.get("_id")) if video else None,
+            "is_proctored": is_proctored,
+            "final_code": final_code,
+            "insights_summary": insights_summary,
         })
 
     return {"sessions": result}

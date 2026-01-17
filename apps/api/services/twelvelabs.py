@@ -18,7 +18,7 @@ from typing import Optional
 from config import get_settings
 from db.collections import Collections
 
-TWELVELABS_API_URL = "https://api.twelvelabs.io/v1.2"
+TWELVELABS_API_URL = "https://api.twelvelabs.io/v1.3"
 
 
 class TwelveLabsService:
@@ -59,6 +59,7 @@ class TwelveLabsService:
 
         # Use configured index if available
         if self.index_id:
+            print(f"[TwelveLabs] Using pre-configured index: {self.index_id}")
             return self.index_id
 
         index_name = "skillpulse-interviews"
@@ -71,46 +72,56 @@ class TwelveLabsService:
                 }
 
                 # List existing indexes
+                print(f"[TwelveLabs] Checking for existing index '{index_name}'...")
                 response = await client.get(
                     f"{TWELVELABS_API_URL}/indexes",
                     headers=headers,
                     timeout=30.0,
                 )
 
+                print(f"[TwelveLabs] List indexes response: {response.status_code}")
                 if response.status_code == 200:
                     indexes = response.json().get("data", [])
                     for index in indexes:
-                        if index["index_name"] == index_name:
-                            return index["_id"]
+                        if index.get("index_name") == index_name:
+                            index_id = index.get("_id")
+                            print(f"[TwelveLabs] Found existing index: {index_id}")
+                            return index_id
+                else:
+                    print(f"[TwelveLabs] List indexes failed: {response.text}")
 
-                # Create new index
+                # Create new index with v1.3 format
+                print(f"[TwelveLabs] Creating new index '{index_name}'...")
+                create_payload = {
+                    "index_name": index_name,
+                    "models": [
+                        {
+                            "model_name": "marengo2.7",
+                            "model_options": ["visual", "audio"],
+                        }
+                    ],
+                }
+                print(f"[TwelveLabs] Create payload: {create_payload}")
+
                 response = await client.post(
                     f"{TWELVELABS_API_URL}/indexes",
                     headers=headers,
-                    json={
-                        "index_name": index_name,
-                        "engines": [
-                            {
-                                "engine_name": "marengo2.6",
-                                "engine_options": ["visual", "conversation", "text_in_video"],
-                            },
-                            {
-                                "engine_name": "pegasus1.1",
-                                "engine_options": ["visual", "conversation"],
-                            },
-                        ],
-                    },
+                    json=create_payload,
                     timeout=30.0,
                 )
 
+                print(f"[TwelveLabs] Create index response: {response.status_code}")
                 if response.status_code in [200, 201]:
-                    return response.json().get("_id")
+                    result = response.json()
+                    index_id = result.get("_id")
+                    print(f"[TwelveLabs] Created new index: {index_id}")
+                    return index_id
 
-                print(f"Failed to create TwelveLabs index: {response.text}")
+                print(f"[TwelveLabs] Failed to create index: {response.text}")
                 return None
 
         except Exception as e:
-            print(f"TwelveLabs index error: {e}")
+            print(f"[TwelveLabs] Index error: {e}")
             return None
 
     async def index_interview_video(
@@ -320,15 +331,27 @@ async def upload_video_to_twelvelabs(
     """Upload and index a video in TwelveLabs."""
     settings = get_settings()
 
+    print(f"[TwelveLabs] Processing video {video_id} for user {user_id}")
+
     if not settings.twelvelabs_api_key:
-        # TwelveLabs not configured
+        # TwelveLabs not configured - mark as ready but no analysis
+        print("[TwelveLabs] WARNING: TWELVELABS_API_KEY not configured!")
+        print("[TwelveLabs] Video will be marked as ready but NO AI analysis will be performed.")
+        print("[TwelveLabs] Set TWELVELABS_API_KEY environment variable to enable video analysis.")
         await Collections.videos().update_one(
             {"_id": video_id},
-            {"$set": {"status": "ready"}},
+            {"$set": {
+                "status": "ready",
+                "summary": None,
+                "highlights": [],
+                "communication_analysis": None,
+                "twelvelabs_not_configured": True,
+            }},
         )
         return
 
     try:
+        print(f"[TwelveLabs] API key configured, starting video indexing...")
         await Collections.videos().update_one(
             {"_id": video_id},
             {"$set": {"status": "indexing"}},
@@ -336,16 +359,19 @@ async def upload_video_to_twelvelabs(
 
         index_id = await get_or_create_index()
         if not index_id:
+            print(f"[TwelveLabs] ERROR: Failed to get or create index")
             await Collections.videos().update_one(
                 {"_id": video_id},
                 {"$set": {"status": "failed"}},
             )
             return
 
+        print(f"[TwelveLabs] Using index: {index_id}")
         headers = {"x-api-key": settings.twelvelabs_api_key}
 
         async with httpx.AsyncClient() as client:
             # Upload video
+            print(f"[TwelveLabs] Uploading video file: {file_path}")
             with open(file_path, "rb") as f:
                 files = {"video_file": (os.path.basename(file_path), f, "video/mp4")}
                 data = {"index_id": index_id}
@@ -359,7 +385,7 @@ async def upload_video_to_twelvelabs(
                 )
 
             if response.status_code not in [200, 201]:
-                print(f"TwelveLabs upload failed: {response.text}")
+                print(f"[TwelveLabs] ERROR: Upload failed: {response.text}")
                 await Collections.videos().update_one(
                     {"_id": video_id},
                     {"$set": {"status": "failed"}},
@@ -369,6 +395,7 @@ async def upload_video_to_twelvelabs(
             result = response.json()
             task_id = result.get("_id")
             twelvelabs_video_id = result.get("video_id")
+            print(f"[TwelveLabs] Upload successful! Task ID: {task_id}, Video ID: {twelvelabs_video_id}")
 
             await Collections.videos().update_one(
                 {"_id": video_id},
@@ -383,21 +410,32 @@ async def upload_video_to_twelvelabs(
             )
 
             # Poll for completion
+            print(f"[TwelveLabs] Polling for indexing completion (max 5 minutes)...")
             service = TwelveLabsService()
+            poll_count = 0
             for _ in range(60):  # Max 5 minutes
                 await asyncio.sleep(5)
+                poll_count += 1
 
                 status = await service.get_task_status(task_id)
+                print(f"[TwelveLabs] Poll #{poll_count}: status = {status['status']}")
 
                 if status["status"] == "ready":
                     twelvelabs_video_id = status["video_id"]
+                    print(f"[TwelveLabs] Video indexed! Starting AI analysis...")
 
                     # Run full analysis
+                    print(f"[TwelveLabs] Running: generate_interview_summary, extract_highlight_clips, analyze_communication_style")
                     summary, highlights, communication = await asyncio.gather(
                         service.generate_interview_summary(twelvelabs_video_id),
                         service.extract_highlight_clips(twelvelabs_video_id),
                         service.analyze_communication_style(twelvelabs_video_id),
                     )
+
+                    print(f"[TwelveLabs] Analysis complete!")
+                    print(f"[TwelveLabs] Summary length: {len(summary) if summary else 0} chars")
+                    print(f"[TwelveLabs] Highlights count: {len(highlights) if highlights else 0}")
+                    print(f"[TwelveLabs] Communication analysis: {communication}")
 
                     await Collections.videos().update_one(
                         {"_id": video_id},
@@ -430,9 +468,11 @@ async def upload_video_to_twelvelabs(
                     if os.path.exists(file_path):
                         os.remove(file_path)
 
+                    print(f"[TwelveLabs] Video {video_id} processing complete!")
                     return
 
                 elif status["status"] == "failed":
+                    print(f"[TwelveLabs] ERROR: Indexing failed: {status.get('error')}")
                     await Collections.videos().update_one(
                         {"_id": video_id},
                         {"$set": {"status": "failed", "error": status.get("error")}},
@@ -440,13 +480,14 @@ async def upload_video_to_twelvelabs(
                     return
 
             # Timeout
+            print(f"[TwelveLabs] ERROR: Indexing timed out after 5 minutes")
             await Collections.videos().update_one(
                 {"_id": video_id},
                 {"$set": {"status": "failed", "error": "Indexing timeout"}},
             )
 
     except Exception as e:
-        print(f"TwelveLabs upload error: {e}")
+        print(f"[TwelveLabs] ERROR: {e}")
         await Collections.videos().update_one(
             {"_id": video_id},
             {"$set": {"status": "failed", "error": str(e)}},

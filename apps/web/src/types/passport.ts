@@ -24,12 +24,28 @@ export interface InterviewHighlight {
   timestamp: string;
   description: string;
   query?: string;
+  category?: string;
+  confidence?: number;
+}
+
+export interface CommunicationScore {
+  score: number;
+  reason: string;
+}
+
+export interface CommunicationAnalysis {
+  clarity?: CommunicationScore;
+  confidence?: CommunicationScore;
+  collaboration?: CommunicationScore;
+  technical_depth?: CommunicationScore;
 }
 
 export interface Interview {
   has_video: boolean;
   video_id?: string;
   highlights: InterviewHighlight[];
+  summary?: string;
+  communication_analysis?: CommunicationAnalysis;
 }
 
 export interface Passport {

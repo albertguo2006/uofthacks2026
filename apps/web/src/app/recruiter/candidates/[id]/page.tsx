@@ -1,34 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SkillPassport } from '@/components/passport/SkillPassport';
-import { HighlightsList } from '@/components/video/HighlightsList';
+import { RecruiterVideoUploader } from '@/components/video/RecruiterVideoUploader';
 import { usePassport } from '@/hooks/usePassport';
 import { api } from '@/lib/api';
-import type { SessionSummary } from '@/types/timeline';
+import type { SessionSummary, RecruiterVideo } from '@/types/timeline';
 
-type SearchResult = {
-  start_time: number;
-  end_time: number;
-  confidence: number;
-  transcript_snippet: string;
-};
+type TimelineItem =
+  | { type: 'session'; data: SessionSummary; date: Date }
+  | { type: 'video'; data: RecruiterVideo; date: Date };
 
 export default function CandidateDetailPage() {
   const params = useParams();
   const candidateId = params.id as string;
   const { passport, isLoading, error } = usePassport(candidateId);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-
   // Sessions for replay
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(true);
+
+  // Recruiter-uploaded videos
+  const [videos, setVideos] = useState<RecruiterVideo[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(true);
+
+  // Expanded state for code display
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+
 
   // Fetch sessions for this candidate
   useEffect(() => {
@@ -45,33 +45,55 @@ export default function CandidateDetailPage() {
     fetchSessions();
   }, [candidateId]);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim() || !passport?.interview?.video_id) return;
-
-    setIsSearching(true);
-    setSearchError(null);
-    try {
-      const response = await api.searchVideo(passport.interview.video_id, searchQuery);
-      setSearchResults(response.results);
-    } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Search failed');
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
+  // Fetch recruiter-uploaded videos
+  useEffect(() => {
+    async function fetchVideos() {
+      try {
+        const response = await api.getRecruiterVideos(candidateId);
+        setVideos(response.videos);
+      } catch (err) {
+        console.error('Failed to load videos:', err);
+      } finally {
+        setLoadingVideos(false);
+      }
     }
-  };
+    fetchVideos();
+  }, [candidateId]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
+  // Combine proctored sessions and videos into a unified timeline
+  const timelineItems = useMemo(() => {
+    const items: TimelineItem[] = [];
+
+    // Add proctored sessions only
+    sessions.filter(s => s.is_proctored).forEach(session => {
+      items.push({
+        type: 'session',
+        data: session,
+        date: new Date(session.started_at)
+      });
+    });
+
+    // Add videos
+    videos.forEach(video => {
+      items.push({
+        type: 'video',
+        data: video,
+        date: new Date(video.uploaded_at)
+      });
+    });
+
+    // Sort by date descending (newest first)
+    return items.sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [sessions, videos]);
 
   const formatTimestamp = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const isLoaded = !loadingSessions && !loadingVideos;
+  const proctoredSessionCount = sessions.filter(s => s.is_proctored).length;
 
   if (isLoading) {
     return (
@@ -110,154 +132,270 @@ export default function CandidateDetailPage() {
         <div className="lg:col-span-2 space-y-6">
           <SkillPassport passport={passport} showAnalytics />
 
-          {/* Coding Sessions with Replay */}
+          {/* Combined Timeline: Proctored Sessions + Recruiter Videos */}
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Coding Sessions</h3>
+              <h3 className="font-semibold">Coding Sessions & Interview Videos</h3>
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+                {proctoredSessionCount} proctored session{proctoredSessionCount !== 1 ? 's' : ''}, {videos.length} video{videos.length !== 1 ? 's' : ''}
               </span>
             </div>
 
-            {loadingSessions ? (
+            {!isLoaded ? (
               <div className="flex justify-center py-4">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
               </div>
-            ) : sessions.length === 0 ? (
+            ) : timelineItems.length === 0 ? (
               <p className="text-gray-500 dark:text-gray-400 text-sm">
-                No coding sessions recorded yet
+                No proctored sessions or videos recorded yet
               </p>
             ) : (
-              <div className="space-y-3">
-                {sessions.map((session) => (
-                  <div
-                    key={session.session_id}
-                    className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700 rounded-lg"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-sm truncate">
-                        {session.task_title}
-                      </h4>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        <span>{session.event_count} events</span>
-                        <span>{session.code_snapshots} snapshots</span>
-                        {session.has_video && (
-                          <span className="flex items-center gap-1 text-purple-500">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                            Video
-                          </span>
-                        )}
-                        <span>
-                          {new Date(session.started_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <Link
-                      href={`/recruiter/candidates/${candidateId}/replay/${session.session_id}`}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+              <div className="space-y-4">
+                {timelineItems.map((item, index) => {
+                  if (item.type === 'session') {
+                    const session = item.data;
+                    const isExpanded = expandedCode === session.session_id;
+
+                    return (
+                      <div
+                        key={`session-${session.session_id}`}
+                        className="border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                      View Replay
-                    </Link>
-                  </div>
-                ))}
+                        {/* Session Header */}
+                        <div className="p-4 bg-gray-50 dark:bg-slate-700">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded">
+                                  Proctored Session
+                                </span>
+                              </div>
+                              <h4 className="font-medium text-sm mt-2 truncate">
+                                {session.task_title}
+                              </h4>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                <span>{session.event_count} events</span>
+                                <span>{session.code_snapshots} snapshots</span>
+                                <span>
+                                  {new Date(session.started_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                            <Link
+                              href={`/recruiter/candidates/${candidateId}/replay/${session.session_id}`}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                            >
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                              View Replay
+                            </Link>
+                          </div>
+                        </div>
+
+                        {/* AI Insights Summary */}
+                        {session.insights_summary && (
+                          <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-purple-50 dark:bg-purple-900/20">
+                            <div className="flex items-start gap-2">
+                              <svg className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              <div>
+                                <p className="text-xs font-medium text-purple-700 dark:text-purple-300 mb-1">AI Insights</p>
+                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                  {session.insights_summary}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Final Code (Collapsible) */}
+                        {session.final_code && (
+                          <div className="border-t border-gray-200 dark:border-slate-600">
+                            <button
+                              onClick={() => setExpandedCode(isExpanded ? null : session.session_id)}
+                              className="w-full px-4 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center justify-between"
+                            >
+                              <span className="flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                </svg>
+                                Final Code
+                              </span>
+                              <svg
+                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {isExpanded && (
+                              <pre className="px-4 py-3 bg-slate-900 text-slate-100 text-xs overflow-x-auto max-h-64">
+                                <code>{session.final_code}</code>
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  } else {
+                    // Video item
+                    const video = item.data;
+                    const isProcessing = video.status === 'uploading' || video.status === 'indexing';
+                    const isReady = video.status === 'ready';
+                    const isFailed = video.status === 'failed';
+                    const hasAnalysis = isReady && (video.summary || video.communication_analysis || (video.highlights && video.highlights.length > 0));
+
+                    return (
+                      <div
+                        key={`video-${video.video_id}`}
+                        className="border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden"
+                      >
+                        {/* Video Header */}
+                        <div className="p-4 bg-gray-50 dark:bg-slate-700">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded">
+                                  Interview Video
+                                </span>
+                                {isProcessing && (
+                                  <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded flex items-center gap-1">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b border-yellow-600"></div>
+                                    {video.status === 'uploading' ? 'Uploading...' : 'Processing...'}
+                                  </span>
+                                )}
+                                {isFailed && (
+                                  <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded">
+                                    Failed
+                                  </span>
+                                )}
+                                {isReady && hasAnalysis && (
+                                  <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded">
+                                    Analysis Ready
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="font-medium text-sm mt-2 truncate">
+                                {video.filename}
+                              </h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {new Date(video.uploaded_at).toLocaleDateString()} at{' '}
+                                {new Date(video.uploaded_at).toLocaleTimeString()}
+                              </p>
+                            </div>
+                            {isReady && hasAnalysis && (
+                              <Link
+                                href={`/recruiter/candidates/${candidateId}/video/${video.video_id}`}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                View Analysis
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Processing Status */}
+                        {isProcessing && (
+                          <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-yellow-50 dark:bg-yellow-900/10">
+                            <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <p className="text-sm">
+                                {video.status === 'uploading'
+                                  ? 'Video is being uploaded...'
+                                  : 'AI is analyzing the video. This may take a few minutes.'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Failed Status */}
+                        {isFailed && (
+                          <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-600 bg-red-50 dark:bg-red-900/10">
+                            <p className="text-sm text-red-700 dark:text-red-300">
+                              Video processing failed. Please try uploading again.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Quick Preview when ready */}
+                        {isReady && hasAnalysis && (
+                          <Link
+                            href={`/recruiter/candidates/${candidateId}/video/${video.video_id}`}
+                            className="block px-4 py-3 border-t border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                          >
+                            {video.summary && (
+                              <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mb-2">
+                                {video.summary}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                {video.highlights && video.highlights.length > 0 && (
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {video.highlights.length} highlights
+                                  </span>
+                                )}
+                                {video.communication_analysis && (
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    Communication scores available
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-primary-600 dark:text-primary-400 flex items-center gap-1">
+                                View full analysis
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </span>
+                            </div>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  }
+                })}
               </div>
             )}
           </div>
         </div>
 
         <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-6">
-            <h3 className="font-semibold mb-4">Interview Highlights</h3>
-            {passport.interview?.has_video ? (
-              <HighlightsList highlights={passport.interview.highlights || []} />
-            ) : (
-              <p className="text-gray-600 dark:text-gray-300">
-                No interview video uploaded
-              </p>
-            )}
-          </div>
-
-          {passport.interview?.has_video && passport.interview.video_id && (
-            <div className="bg-white dark:bg-slate-800 rounded-lg p-6">
-              <h3 className="font-semibold mb-4">Search Video</h3>
-              <input
-                type="text"
-                placeholder="e.g., 'testing strategy'"
-                className="w-full px-4 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-              />
-              <button
-                onClick={handleSearch}
-                disabled={isSearching || !searchQuery.trim()}
-                className="mt-2 w-full px-4 py-2 bg-gray-100 dark:bg-slate-700 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 disabled:opacity-50"
-              >
-                {isSearching ? 'Searching...' : 'Search'}
-              </button>
-
-              {searchError && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                  {searchError}
-                </p>
-              )}
-
-              {searchResults.length > 0 && (
-                <div className="mt-4 space-y-3">
-                  <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                    Results ({searchResults.length})
-                  </h4>
-                  {searchResults.map((result, index) => (
-                    <div
-                      key={index}
-                      className="p-3 bg-gray-50 dark:bg-slate-700 rounded-lg"
-                    >
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm font-mono text-primary-600">
-                          {formatTimestamp(result.start_time)} - {formatTimestamp(result.end_time)}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {(result.confidence * 100).toFixed(0)}% match
-                        </span>
-                      </div>
-                      {result.transcript_snippet && (
-                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                          {result.transcript_snippet}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {!isSearching && searchQuery && searchResults.length === 0 && !searchError && (
-                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400 text-center">
-                  No results found
-                </p>
-              )}
-            </div>
-          )}
+          {/* Video Upload Section */}
+          <RecruiterVideoUploader
+            candidateId={candidateId}
+            onUploadComplete={() => {
+              // Refresh videos list
+              api.getRecruiterVideos(candidateId).then(response => {
+                setVideos(response.videos);
+              });
+            }}
+          />
         </div>
       </div>
     </div>

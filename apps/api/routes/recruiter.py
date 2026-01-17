@@ -7,17 +7,22 @@ Provides AI-powered candidate ranking and analysis:
 - GET /recruiter/candidates/{user_id}/analysis - Get detailed AI analysis for a candidate
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from bson import ObjectId
+import aiofiles
+import os
 
 from middleware.auth import get_current_user
 from db.collections import Collections
 from services.backboard import BackboardService
 from services.amplitude import forward_to_amplitude
+from services.twelvelabs import upload_video_to_twelvelabs
 from routes.passport import ARCHETYPES
+
+UPLOAD_DIR = "/tmp/video_uploads"
 
 router = APIRouter()
 
@@ -364,7 +369,7 @@ async def list_jobs_for_recruiter(
     """
     jobs_cursor = Collections.jobs().find({})
     jobs = []
-    
+
     async for job in jobs_cursor:
         jobs.append({
             "job_id": job["job_id"],
@@ -372,5 +377,155 @@ async def list_jobs_for_recruiter(
             "company": job.get("company", ""),
             "has_target_radar": bool(job.get("target_radar")),
         })
-    
+
     return {"jobs": jobs}
+
+
+class VideoUploadResponse(BaseModel):
+    video_id: str
+    status: str
+    candidate_id: str
+
+
+@router.post("/candidates/{candidate_id}/video", response_model=VideoUploadResponse, status_code=202)
+async def upload_candidate_video(
+    candidate_id: str,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_recruiter),
+):
+    """
+    Upload an interview video for a candidate.
+
+    This allows recruiters to upload interview recordings for candidates
+    to be analyzed by TwelveLabs for insights.
+    """
+    # Verify candidate exists
+    candidate = await Collections.users().find_one({"_id": candidate_id})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Validate file type
+    allowed_types = ["video/mp4", "video/webm", "video/quicktime"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type {file.content_type} not allowed. Use mp4, webm, or mov.",
+        )
+
+    video_id = str(ObjectId())
+
+    # Create upload directory if needed
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+    # Save file temporarily
+    file_path = os.path.join(UPLOAD_DIR, f"{video_id}_{file.filename}")
+
+    async with aiofiles.open(file_path, "wb") as f:
+        content = await file.read()
+        await f.write(content)
+
+    # Create video document (owned by candidate, uploaded by recruiter)
+    video_doc = {
+        "_id": video_id,
+        "user_id": candidate_id,
+        "uploaded_by": current_user["user_id"],
+        "uploaded_by_role": "recruiter",
+        "status": "uploading",
+        "filename": file.filename,
+        "file_path": file_path,
+        "uploaded_at": datetime.utcnow(),
+    }
+
+    await Collections.videos().insert_one(video_doc)
+
+    # Update passport with this video as interview video
+    await Collections.passports().update_one(
+        {"user_id": candidate_id},
+        {
+            "$set": {
+                "interview_video_id": video_id,
+                "interview_highlights": [],
+            }
+        },
+        upsert=True,
+    )
+
+    # Process video in background (upload to TwelveLabs)
+    background_tasks.add_task(
+        upload_video_to_twelvelabs,
+        video_id=video_id,
+        user_id=candidate_id,
+        file_path=file_path,
+    )
+
+    # Track event
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": current_user["user_id"],
+        "event_type": "recruiter_video_uploaded",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "candidate_id": candidate_id,
+            "video_id": video_id,
+        },
+        "forwarded_to_amplitude": False,
+    }
+    await Collections.events().insert_one(event_doc)
+
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=current_user["user_id"],
+        event_type="recruiter_video_uploaded",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "candidate_id": candidate_id,
+            "video_id": video_id,
+        },
+    )
+
+    return VideoUploadResponse(
+        video_id=video_id,
+        status="uploading",
+        candidate_id=candidate_id,
+    )
+
+
+@router.get("/candidates/{user_id}/videos")
+async def get_candidate_videos(
+    user_id: str,
+    current_user: dict = Depends(require_recruiter),
+):
+    """
+    Get all videos for a candidate with their processing status and analysis.
+
+    Returns videos uploaded by recruiters for this candidate,
+    including processing status and AI analysis when ready.
+    """
+    # Verify candidate exists
+    candidate = await Collections.users().find_one({"_id": user_id})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Fetch all videos for this candidate
+    videos_cursor = Collections.videos().find({
+        "user_id": user_id
+    }).sort("uploaded_at", -1)
+    videos = await videos_cursor.to_list(length=50)
+
+    result = []
+    for video in videos:
+        result.append({
+            "video_id": str(video.get("_id")),
+            "status": video.get("status", "unknown"),
+            "filename": video.get("filename"),
+            "uploaded_at": video.get("uploaded_at"),
+            "uploaded_by": video.get("uploaded_by"),
+            "summary": video.get("summary"),
+            "highlights": video.get("highlights"),
+            "communication_analysis": video.get("communication_analysis"),
+        })
+
+    return {"videos": result}
