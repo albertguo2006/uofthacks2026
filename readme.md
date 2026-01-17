@@ -401,7 +401,171 @@ The following JSON structure must be strictly adhered to when batching events to
 | **Data Feed Latency/Staleness**: The TTC GTFS-RT feed stops updating or returns stale timestamps during the demo. | Critical (App looks broken) | Low | **"Tape Delay" Mode**: Record 1 hour of live GTFS data on Friday night into a local JSON file. Add a toggle in `gtfs_ingest.py` to switch from `LIVE_URL` to `LOCAL_FILE`, replaying the recorded data with updated timestamps if the live feed fails. |
 | **Missing Occupancy Data**: The feed returns null for `occupancy_status` for specific buses. | Moderate (Feature unavailable) | High | **Proxy Logic**: Implement a fallback calculation in Python: if `speed < 5 km/h` AND time is `Rush_Hour`: `occupancy = 'LIKELY_CROWDED'`. This ensures the UI always has a status to display, even if inferred. |
 
-## 8. Conclusion
+## 8. Hackathon Theme: "Identity" and Primary Sponsor Strategy
+
+The hackathon theme is **"Identity"**. Transit Oracle connects to this theme through three distinct lenses, each aligned with a primary sponsor track:
+
+> *"Transit Oracle reveals the **Operational Identity** of every vehicle through behavioral analytics (Amplitude), adapts its **Communication Identity** to serve different stakeholders (Backboard.io), and protects the **Access Identity** of sensitive infrastructure data (1Password)."*
+
+### 8.1 Amplitude: Operational Identity (PRIMARY SPONSOR)
+
+**Theme Connection:** A vehicle's "identity" is not its license plate—it's its behavioral patterns. Every bus in the TTC fleet has a unique operational signature revealed by data. Some are "Chronic Laggards" (consistently high gap times), others are "Reliable Workhorses" (on-time, full trips).
+
+**Implementation Strategy:**
+
+The "Bus-as-User" paradigm already satisfies Amplitude's core requirement of a clear event schema. To hit the "self-improving product" criterion:
+
+1. **Behavioral Profiling:** Use Amplitude's user properties to store aggregated metrics per bus:
+   - `short_turn_rate`: Percentage of trips ending early (last 30 days)
+   - `avg_gap_time`: Mean schedule deviation
+   - `reliability_score`: Composite metric (0-100)
+
+2. **Self-Improving Loop:**
+   ```
+   [Amplitude Cohort] → [Middleware Detection] → [Automated Action]
+   ```
+   - Define a cohort: "Buses with `short_turn_rate > 20%` in the last 7 days"
+   - Middleware polls this cohort every 5 minutes
+   - When a "high-risk" bus is detected in real-time AND matches the cohort, the system:
+     - Flags it RED on the Rider View
+     - Auto-generates a TSP priority request for upcoming signals
+     - Logs an `intervention_triggered` event back to Amplitude
+
+3. **Demo Narrative:** "The system identified Bus 1024 as a chronic short-turner. When it started running late today, Transit Oracle preemptively requested signal priority to prevent another failure. That's a self-improving feedback loop."
+
+**Feasibility:** HIGH. The existing schema supports this with minimal additions.
+
+---
+
+### 8.2 Backboard.io: Communication Identity (PRIMARY SPONSOR)
+
+**Theme Connection:** The application possesses a fluid identity. When serving a **Rider**, it speaks as an "Empathetic Commuter Advocate" (simple warnings). When serving the **Mayor**, it transforms into a "Data-Driven Policy Analyst" (cost-focused, formal).
+
+**Sponsor Requirement:** The challenge requires using **two different LLM models** via the Backboard API.
+
+**Implementation Strategy:**
+
+Replace the single Gemini API call with Backboard.io orchestration. Model selection is based on **latency and task complexity**, not arbitrary "personality":
+
+| Task | Model (via Backboard) | Rationale |
+|------|----------------------|-----------|
+| **Rider Alerts** (real-time) | Gemini Flash / Claude Haiku | Low latency (<500ms), simple output: "Your bus may short turn." |
+| **Policy Documents** (on-demand) | Claude Sonnet / GPT-4 | High quality, complex reasoning for multi-paragraph council motions. |
+
+**Code Architecture:**
+
+```python
+# backboard_middleware.py
+import requests
+
+BACKBOARD_API_KEY = os.environ.get("BACKBOARD_API_KEY")
+BACKBOARD_URL = "https://api.backboard.io/v1/chat/completions"
+
+def generate_rider_alert(bus_data: dict) -> str:
+    """Fast model for real-time rider warnings."""
+    payload = {
+        "model": "gemini-flash",  # or "claude-haiku"
+        "messages": [
+            {"role": "system", "content": "You are a helpful transit assistant. Be concise and clear."},
+            {"role": "user", "content": f"Bus {bus_data['route']} is {bus_data['gap_time']}s late with high crowding. Generate a 1-sentence rider warning."}
+        ],
+        "max_tokens": 50
+    }
+    response = requests.post(BACKBOARD_URL, json=payload, headers={"Authorization": f"Bearer {BACKBOARD_API_KEY}"})
+    return response.json()["choices"][0]["message"]["content"]
+
+def generate_policy_motion(analytics_data: dict) -> str:
+    """Powerful model for formal policy documents."""
+    payload = {
+        "model": "claude-sonnet",  # or "gpt-4"
+        "messages": [
+            {"role": "system", "content": "You are a senior city transportation planner. Write formally and cite data."},
+            {"role": "user", "content": f"""Based on the following transit efficiency data:
+- Intersection: {analytics_data['intersection']}
+- Total signal delay this month: {analytics_data['delay_hours']} hours
+- Estimated taxpayer cost: ${analytics_data['cost']}
+
+Draft a 150-word motion to City Council requesting Transit Signal Priority installation."""}
+        ],
+        "max_tokens": 300
+    }
+    response = requests.post(BACKBOARD_URL, json=payload, headers={"Authorization": f"Bearer {BACKBOARD_API_KEY}"})
+    return response.json()["choices"][0]["message"]["content"]
+```
+
+**Why NOT Memory:** Implementing persistent memory (e.g., "remember the Mayor asked about King Street") requires database storage, session management, and retrieval-augmented generation. This is scope creep for a 36-hour hackathon. Focus on clean model-switching.
+
+**Feasibility:** MEDIUM. Achievable with ~2-3 hours of integration work.
+
+---
+
+### 8.3 1Password: Access Identity (PRIMARY SPONSOR)
+
+**Theme Connection:** "Identity" in cybersecurity means **proof**. How do we verify that the person accessing the Mayor Dashboard is authorized to see sensitive efficiency data?
+
+**Sponsor Requirement:** The challenge values "Keep it Simple" and suggests passkeys as an "extra mile" feature.
+
+**Implementation Strategy (Tiered):**
+
+**Tier 1: Secrets Management (REQUIRED)**
+- Store all API keys (`AMPLITUDE_API_KEY`, `BACKBOARD_API_KEY`, `TTC_FEED_URL`) in a 1Password vault
+- Use 1Password CLI (`op`) or Service Accounts to inject secrets at runtime
+- **UI Element:** Display a "Security Health" badge on the dashboard:
+  ```
+  🔒 Secured by 1Password
+  ✓ API keys loaded from vault
+  ✓ No secrets in codebase
+  ```
+
+**Tier 2: Admin Authentication (IF TIME PERMITS)**
+- Implement a "Mayor Login" gate using 1Password's authentication SDK
+- This protects the Policy Dashboard from unauthorized access
+- Display session info: "Logged in as: Mayor's Office (verified)"
+
+**Tier 3: Passkeys (STRETCH GOAL ONLY)**
+- Full WebAuthn/passkey implementation requires:
+  - Frontend WebAuthn API integration
+  - Backend public key storage and challenge/response flow
+  - ~4-6 hours of work
+- **Recommendation:** Only attempt if Tiers 1-2 are complete by Saturday night
+
+**Risk Assessment:**
+| Approach | Effort | Demo Risk | Sponsor Appeal |
+|----------|--------|-----------|----------------|
+| Secrets Management Only | 1 hour | None | Moderate |
+| + Admin Auth | 2-3 hours | Low | High |
+| + Passkeys | 4-6 hours | HIGH (if broken) | Very High |
+
+**Feasibility:** HIGH for Tier 1-2, LOW for Tier 3 (passkeys).
+
+---
+
+### 8.4 Updated Team Delegation for Sponsor Tracks
+
+| Member | Primary Responsibility | Sponsor Track |
+|--------|----------------------|---------------|
+| Member A (Data) | GTFS ingestion, geospatial joins | - |
+| Member B (Architect) | Amplitude schema, Polling Cache, **1Password integration** | 1Password |
+| Member C (Frontend) | Rider View, MapLibre, **Security Health UI** | 1Password (UI) |
+| Member D (Policy/AI) | Mayor View, **Backboard.io middleware**, policy generation | Backboard.io |
+
+**All members** contribute to the Amplitude narrative, as it's embedded in the core architecture.
+
+---
+
+### 8.5 Alternative Sponsor Considerations
+
+The following sponsors from Section 4 remain viable as secondary targets:
+
+| Sponsor | Integration Effort | Keep/Drop |
+|---------|-------------------|-----------|
+| MongoDB Atlas | Low (add logging to ingestion) | **KEEP** |
+| ElevenLabs | Low (audio alerts) | **KEEP** if time |
+| Gemini API | Replaced by Backboard | **DROP** (use via Backboard instead) |
+
+**Note:** The original "Best Use of Gemini API" track is now satisfied through Backboard.io, which routes to Gemini. This dual-coverage is intentional.
+
+## 9. Conclusion
 
 Transit Oracle represents a sophisticated fusion of real-time data ingestion, spatial analysis, and predictive modeling. By successfully implementing the "Polling Cache" architecture, we can leverage the full power of Amplitude's analytical engine within the constraints of a hackathon environment. The "Bus-as-User" schema provides a novel and compelling narrative for the judges, while the "Mayor View" grounded in valid transportation engineering mathematics demonstrates real-world business value. The strategic inclusion of Gemini, MongoDB, and 1Password technologies further solidifies the project's competitiveness across multiple sponsor tracks. The project is technically feasible and primed for execution.
 
