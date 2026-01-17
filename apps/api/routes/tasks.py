@@ -112,12 +112,14 @@ async def run_code(
                 timeout_seconds=task.get("time_limit_seconds", 5),
             )
 
+            is_hidden = test_case.get("hidden", False)
             results.append(
                 TestCaseResult(
                     test_case=i + 1,
                     passed=result["passed"],
                     output=result["output"],
-                    expected=test_case["expected_output"] if not test_case.get("hidden") else None,
+                    expected=test_case["expected_output"] if not is_hidden else None,
+                    hidden=is_hidden,
                     time_ms=result["time_ms"],
                     error=result.get("error"),
                 )

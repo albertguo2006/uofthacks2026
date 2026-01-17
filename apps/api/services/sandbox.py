@@ -91,18 +91,26 @@ async def execute_code(
         }
 
 
+def is_null_value(val: Any) -> bool:
+    """Check if a value represents null/None in various forms."""
+    if val is None:
+        return True
+    if val == "null":
+        return True
+    if val == "None":
+        return True
+    return False
+
+
 def compare_outputs(actual: Any, expected: Any) -> bool:
     """Compare actual output with expected output."""
-    # Normalize string "null" to actual None (can happen with JSON parsing edge cases)
-    if actual == "null":
-        actual = None
-    if expected == "null":
-        expected = None
+    # Handle None/null comparison - check both values for any null representation
+    actual_is_null = is_null_value(actual)
+    expected_is_null = is_null_value(expected)
 
-    # Handle None/null comparison
-    if actual is None and expected is None:
+    if actual_is_null and expected_is_null:
         return True
-    if actual is None or expected is None:
+    if actual_is_null or expected_is_null:
         return False
 
     # String comparison (strip whitespace)

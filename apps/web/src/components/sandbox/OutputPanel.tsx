@@ -80,12 +80,14 @@ export function OutputPanel({ result }: OutputPanelProps) {
                     {test.error}
                   </div>
                 )}
-                {test.expected !== undefined && (
-                  <div className="text-gray-400">
-                    <span className="text-gray-500">Expected: </span>
+                <div className="text-gray-400">
+                  <span className="text-gray-500">Expected: </span>
+                  {test.hidden ? (
+                    <span className="text-gray-500 italic">[hidden]</span>
+                  ) : (
                     <span className="text-green-400">{JSON.stringify(test.expected)}</span>
-                  </div>
-                )}
+                  )}
+                </div>
                 {test.output !== undefined && (
                   <div className="text-gray-400">
                     <span className="text-gray-500">Got: </span>

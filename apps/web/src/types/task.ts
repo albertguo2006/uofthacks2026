@@ -21,6 +21,7 @@ export interface TestResult {
   passed: boolean;
   output?: any;
   expected?: any;
+  hidden?: boolean;
   time_ms: number;
   error?: string;
 }

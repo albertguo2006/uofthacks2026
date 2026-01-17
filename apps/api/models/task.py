@@ -48,6 +48,7 @@ class TestCaseResult(BaseModel):
     passed: bool
     output: Any
     expected: Any = None
+    hidden: bool = False
     time_ms: int
     error: Optional[str] = None
 
