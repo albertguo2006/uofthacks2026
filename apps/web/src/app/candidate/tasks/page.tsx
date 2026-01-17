@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
 import { useTasks } from '@/hooks/useTasks';
 import { ProctoredBadge } from '@/components/ui/ProctoredBadge';

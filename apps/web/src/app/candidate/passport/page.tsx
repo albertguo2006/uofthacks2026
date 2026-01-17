@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { usePassport } from '@/hooks/usePassport';
 import { SkillPassport } from '@/components/passport/SkillPassport';
 
