@@ -250,3 +250,64 @@ async def update_passport_after_submit(
             "integrity_score": metrics["integrity"],
         },
     )
+
+
+async def update_skill_proficiencies_after_submit(
+    user_id: str,
+    task_id: str,
+    passed: bool,
+    score: int,
+):
+    """Update user's skill proficiencies after task submission."""
+    # Get task details to extract skills
+    task = await Collections.tasks().find_one({"task_id": task_id})
+    if not task:
+        return
+
+    # Get skills from task tags and category
+    skills = []
+    if task.get("tags"):
+        skills.extend(task["tags"])
+    if task.get("category"):
+        skills.append(task["category"])
+
+    if not skills:
+        return
+
+    # Get or create skill proficiencies document
+    prof_doc = await Collections.skill_proficiencies().find_one({"user_id": user_id})
+    proficiencies = prof_doc.get("proficiencies", {}) if prof_doc else {}
+
+    # Update each skill's proficiency
+    for skill in skills:
+        skill_key = skill.lower().replace(" ", "_")
+
+        if skill_key not in proficiencies:
+            proficiencies[skill_key] = {
+                "name": skill,
+                "score": 0.0,
+                "tasks_completed": 0,
+                "total_score": 0,
+                "last_updated": datetime.utcnow().isoformat(),
+            }
+
+        prof = proficiencies[skill_key]
+        prof["tasks_completed"] += 1
+        prof["total_score"] += score
+        prof["score"] = prof["total_score"] / prof["tasks_completed"] / 100.0  # Normalize to 0-1
+        prof["last_updated"] = datetime.utcnow().isoformat()
+
+    # Upsert skill proficiencies document
+    await Collections.skill_proficiencies().update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "proficiencies": proficiencies,
+                "updated_at": datetime.utcnow(),
+            },
+            "$setOnInsert": {
+                "user_id": user_id,
+            },
+        },
+        upsert=True,
+    )

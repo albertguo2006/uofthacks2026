@@ -205,3 +205,36 @@ async def get_passport(user_id: str, request: Request, current_user: dict = Depe
 async def get_my_passport(request: Request, current_user: dict = Depends(get_current_user)):
     """Get the current user's skill passport."""
     return await get_passport(current_user["user_id"], request, current_user)
+
+
+@router.get("/{user_id}/proficiencies")
+async def get_skill_proficiencies(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get a user's skill proficiencies."""
+    # Allow viewing own proficiencies or if recruiter
+    if current_user["user_id"] != user_id and current_user.get("role") != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view these proficiencies",
+        )
+
+    prof_doc = await Collections.skill_proficiencies().find_one({"user_id": user_id})
+
+    if not prof_doc:
+        return {"proficiencies": []}
+
+    # Convert dict to list for frontend
+    proficiencies = []
+    for key, prof in prof_doc.get("proficiencies", {}).items():
+        proficiencies.append({
+            "name": prof.get("name", key),
+            "score": prof.get("score", 0.0),
+            "tasks_completed": prof.get("tasks_completed", 0),
+        })
+
+    # Sort by score descending
+    proficiencies.sort(key=lambda x: x["score"], reverse=True)
+
+    return {"proficiencies": proficiencies}

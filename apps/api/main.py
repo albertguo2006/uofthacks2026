@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from config import get_settings
 from db.mongo import connect_db, close_db
-from routes import auth, passkey, track, tasks, jobs, passport, video, radar, proctoring, analytics, chat, recruiter
+from routes import auth, passkey, track, tasks, jobs, passport, video, radar, proctoring, analytics, chat, recruiter, applications
 
 
 @asynccontextmanager
@@ -25,13 +25,14 @@ app = FastAPI(
 
 settings = get_settings()
 
-# CORS
+# CORS - explicit origins for credential support
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Routes
@@ -47,6 +48,7 @@ app.include_router(proctoring.router, prefix="/proctoring", tags=["Proctoring"])
 app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 app.include_router(recruiter.router, prefix="/recruiter", tags=["Recruiter"])
+app.include_router(applications.router, prefix="/applications", tags=["Applications"])
 
 
 @app.get("/health")

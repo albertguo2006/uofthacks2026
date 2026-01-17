@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from datetime import datetime
 from typing import Optional
+import uuid
 
 from middleware.auth import get_current_user
 from db.collections import Collections
-from models.job import JobMatch, JobsResponse, UnlockRequirements
+from models.job import JobMatch, JobsResponse, UnlockRequirements, JobCreate, RecruiterJob
 from services.skillgraph import compute_job_fit
 
 router = APIRouter()
@@ -151,3 +152,114 @@ async def list_jobs(
         user_skill_vector=user_skill_vector,
         last_updated=datetime.utcnow(),
     )
+
+
+@router.post("", response_model=RecruiterJob)
+async def create_job(
+    job_data: JobCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Create a new job posting (recruiters only)."""
+    if current_user.get("role") != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only recruiters can create job postings",
+        )
+
+    job_id = f"recruiter-{uuid.uuid4().hex[:8]}"
+    now = datetime.utcnow()
+
+    job_doc = {
+        "job_id": job_id,
+        "title": job_data.title,
+        "description": job_data.description,
+        "company": job_data.company,
+        "tier": job_data.tier,
+        "target_vector": [0.5, 0.5, 0.5, 0.5, 0.5],
+        "min_fit": 0.3,
+        "must_have": {"min_sessions": 1},
+        "salary_range": job_data.salary_range,
+        "location": job_data.location,
+        "tags": job_data.tags,
+        "created_at": now,
+        "recruiter_id": current_user["user_id"],
+    }
+
+    await Collections.jobs().insert_one(job_doc)
+
+    return RecruiterJob(
+        job_id=job_id,
+        title=job_data.title,
+        description=job_data.description,
+        company=job_data.company,
+        tier=job_data.tier,
+        salary_range=job_data.salary_range,
+        location=job_data.location,
+        tags=job_data.tags,
+        created_at=now,
+        recruiter_id=current_user["user_id"],
+    )
+
+
+@router.get("/recruiter", response_model=list[RecruiterJob])
+async def list_recruiter_jobs(
+    current_user: dict = Depends(get_current_user),
+):
+    """Get all jobs created by the current recruiter."""
+    if current_user.get("role") != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only recruiters can access this endpoint",
+        )
+
+    cursor = Collections.jobs().find({"recruiter_id": current_user["user_id"]})
+    jobs = []
+
+    async for job in cursor:
+        jobs.append(
+            RecruiterJob(
+                job_id=job["job_id"],
+                title=job["title"],
+                description=job.get("description", ""),
+                company=job["company"],
+                tier=job.get("tier", 0),
+                salary_range=job.get("salary_range", ""),
+                location=job.get("location", ""),
+                tags=job.get("tags", []),
+                created_at=job.get("created_at", datetime.utcnow()),
+                recruiter_id=job["recruiter_id"],
+            )
+        )
+
+    return jobs
+
+
+@router.delete("/{job_id}")
+async def delete_job(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete a job posting (owner only)."""
+    if current_user.get("role") != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only recruiters can delete job postings",
+        )
+
+    job = await Collections.jobs().find_one({"job_id": job_id})
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+
+    if job.get("recruiter_id") != current_user["user_id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own job postings",
+        )
+
+    await Collections.jobs().delete_one({"job_id": job_id})
+
+    return {"message": "Job deleted successfully"}

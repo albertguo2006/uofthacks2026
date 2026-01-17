@@ -16,7 +16,7 @@ from models.task import (
 )
 from services.sandbox import execute_code
 from services.amplitude import forward_to_amplitude
-from services.skillgraph import update_passport_after_submit
+from services.skillgraph import update_passport_after_submit, update_skill_proficiencies_after_submit
 from services.task_recommender import get_recommended_tasks
 
 router = APIRouter()
@@ -470,6 +470,15 @@ async def submit_solution(
         update_passport_after_submit,
         user_id=current_user["user_id"],
         session_id=submission.session_id,
+        task_id=task_id,
+        passed=passed,
+        score=score,
+    )
+
+    # Update skill proficiencies in background
+    background_tasks.add_task(
+        update_skill_proficiencies_after_submit,
+        user_id=current_user["user_id"],
         task_id=task_id,
         passed=passed,
         score=score,
