@@ -5,7 +5,7 @@ Phase 1: Utility functions for working with behavioral schemas
 
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timezone
-from apps.api.models.behavioral_analysis import (
+from models.behavioral_analysis import (
     BehaviorType,
     SeverityLevel,
     SuspiciousSegment,
