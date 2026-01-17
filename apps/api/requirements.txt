@@ -12,4 +12,5 @@ httpx==0.26.0
 scikit-learn==1.4.0
 numpy==1.26.3
 aiofiles==23.2.1
+email-validator==2.1.0
 backboard-sdk
