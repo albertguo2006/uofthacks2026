@@ -35,7 +35,9 @@ export default function TasksPage() {
             <Link
               key={task.task_id}
               href={`/candidate/tasks/${task.task_id}`}
-              className="block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              className={`block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow ${
+                task.passed ? 'ring-2 ring-green-500 dark:ring-green-400' : ''
+              }`}
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -74,7 +76,14 @@ export default function TasksPage() {
                     )}
                   </div>
                 </div>
-                <span className="text-primary-600 ml-4">Start →</span>
+                <div className="flex items-center gap-2 ml-4">
+                  {task.passed && (
+                    <span className="text-green-600 dark:text-green-400 text-lg" title="Completed">
+                      ✓
+                    </span>
+                  )}
+                  <span className="text-primary-600">Start →</span>
+                </div>
               </div>
             </Link>
           ))}
