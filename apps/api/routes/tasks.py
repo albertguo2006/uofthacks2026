@@ -34,9 +34,10 @@ async def list_tasks(current_user: dict = Depends(get_current_user)):
 
     async for task in cursor:
         is_proctored = task.get("proctored", False)
+        task_completed = user_completions.get(task["task_id"]) is True
 
-        # For proctored tasks, hide description until session starts
-        if is_proctored:
+        # For proctored tasks, hide description until session starts (unless completed)
+        if is_proctored and not task_completed:
             title = "[PROCTORED TASK]"
             description = "Start proctored session to view task details"
         else:

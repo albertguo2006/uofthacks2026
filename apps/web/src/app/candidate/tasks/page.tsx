@@ -35,7 +35,9 @@ export default function TasksPage() {
             <Link
               key={task.task_id}
               href={`/candidate/tasks/${task.task_id}`}
-              className="block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              className={`block p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm hover:shadow-md transition-shadow ${
+                task.passed ? 'ring-2 ring-green-500 dark:ring-green-400' : ''
+              }`}
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
