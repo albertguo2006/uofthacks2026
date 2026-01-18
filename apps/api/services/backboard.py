@@ -14,7 +14,7 @@ Model routing (Two AI Models for hints + archetype):
   - analyze_code_error - Technical code analysis
   - parse_job_requirements - Job description parsing
   
-- Gemini (direct API - gemini-2.5-pro) for:
+- Gemini (direct API - gemini-2.5-flash) for:
   - Profile summaries & chat
   - Fallback when Backboard is unavailable (upgraded from flash to pro for better hints)
   
@@ -228,29 +228,28 @@ class BackboardService:
         Combines system prompt and user message for Gemini's format.
         """
         print(f"\n{YELLOW}╭─────────────────────────────────────────────────────────────╮{RESET}")
-        print(f"{YELLOW}│ [Fallback] Backboard failed → Using Gemini Pro              │{RESET}")
+        print(f"{YELLOW}│ [Fallback] Backboard failed → Using Gemini Flash            │{RESET}")
         print(f"{YELLOW}╰─────────────────────────────────────────────────────────────╯{RESET}")
 
         # Build session key for conversation continuity if thread_key provided
         session_key = f"{self.user_id}:fallback:{thread_key}" if thread_key else None
 
-        # Call Gemini Pro with the system prompt as instruction
-        # Using higher max_tokens for better hint quality
+        # Call Gemini Flash with the system prompt as instruction
         result = await self._call_gemini(
             prompt=user_message,
             system_instruction=system_prompt,
             session_key=session_key,
             temperature=0.7,
             max_tokens=800,  # Increased for better hints
-            use_pro_model=True,  # Explicitly use Pro for fallback
+            use_pro_model=False,  # Use Flash (faster, cheaper)
         )
 
         # If Gemini also fails, return the basic fallback
         if not result or result == self._fallback_response([]):
-            print(f"{RED}[Fallback] ✗ Gemini Pro also failed, using static fallback{RESET}")
+            print(f"{RED}[Fallback] ✗ Gemini Flash also failed, using static fallback{RESET}")
             return self._fallback_response([{"content": user_message}])
 
-        print(f"{GREEN}[Fallback] ✓ Gemini Pro provided hint successfully{RESET}")
+        print(f"{GREEN}[Fallback] ✓ Gemini Flash provided hint successfully{RESET}")
         return result
 
     def _strip_markdown_json(self, response: str) -> str:
@@ -274,12 +273,12 @@ class BackboardService:
         session_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 500,
-        use_pro_model: bool = True,  # Use the more capable Pro model by default
+        use_pro_model: bool = False,  # Use Flash by default (faster, cheaper)
     ) -> str:
         """
         Direct call to Gemini API.
-        - gemini-2.5-pro: More capable, better reasoning (default for hints/fallback)
-        - gemini-2.5-flash: Faster, cheaper (use for simple tasks)
+        - gemini-2.5-flash: Faster, cheaper (default)
+        - gemini-2.5-pro: More capable, better reasoning
         Supports conversation history via session_key.
         """
         model_name = "gemini-2.5-pro" if use_pro_model else "gemini-2.5-flash"
