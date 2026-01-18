@@ -173,7 +173,13 @@ input_data = json.loads(sys.argv[1])
 
 # Try common function patterns
 result = None
-if 'processUser' in dir():
+if 'solution' in dir():
+    result = solution(input_data)
+elif 'twoSum' in dir():
+    result = twoSum(input_data)
+elif 'two_sum' in dir():
+    result = two_sum(input_data)
+elif 'processUser' in dir():
     result = processUser(input_data.get('user'))
 elif 'process_user' in dir():
     result = process_user(input_data.get('user'))
@@ -242,7 +248,11 @@ const input = JSON.parse(process.argv[2]);
 {code}
 
 let result;
-if (typeof processUser === 'function') {{
+if (typeof solution === 'function') {{
+    result = solution(input);
+}} else if (typeof twoSum === 'function') {{
+    result = twoSum(input);
+}} else if (typeof processUser === 'function') {{
     result = processUser(input.user);
 }} else if (typeof main === 'function') {{
     result = main(input);

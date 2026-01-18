@@ -27,6 +27,7 @@ const functionNames = [
     'processUser', 'process_user',
     'solution', 'solve',
     'main', 'run',
+    'twoSum', 'two_sum',
 ];
 
 // Try each function name
