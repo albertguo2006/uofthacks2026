@@ -434,6 +434,7 @@ async def upload_candidate_video(
         "status": "uploading",
         "filename": file.filename,
         "file_path": file_path,
+        "content_type": file.content_type,
         "uploaded_at": datetime.utcnow(),
     }
 

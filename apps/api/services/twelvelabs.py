@@ -378,20 +378,27 @@ async def upload_video_to_twelvelabs(
         print(f"[TwelveLabs] Using index: {index_id}")
         headers = {"x-api-key": settings.twelvelabs_api_key}
 
+        # Get content type from video document
+        video_doc = await Collections.videos().find_one({"_id": video_id})
+        content_type = video_doc.get("content_type", "video/mp4") if video_doc else "video/mp4"
+        print(f"[TwelveLabs] Using content type: {content_type}")
+
         async with httpx.AsyncClient() as client:
-            # Upload video
+            # Upload video - read file content into memory first for reliable async operation
             print(f"[TwelveLabs] Uploading video file: {file_path}")
             with open(file_path, "rb") as f:
-                files = {"video_file": (os.path.basename(file_path), f, "video/mp4")}
-                data = {"index_id": index_id}
+                file_content = f.read()
 
-                response = await client.post(
-                    f"{TWELVELABS_API_URL}/tasks",
-                    headers=headers,
-                    files=files,
-                    data=data,
-                    timeout=300.0,
-                )
+            files = {"video_file": (os.path.basename(file_path), file_content, content_type)}
+            data = {"index_id": index_id}
+
+            response = await client.post(
+                f"{TWELVELABS_API_URL}/tasks",
+                headers=headers,
+                files=files,
+                data=data,
+                timeout=300.0,
+            )
 
             if response.status_code not in [200, 201]:
                 print(f"[TwelveLabs] ERROR: Upload failed: {response.text}")
