@@ -246,6 +246,8 @@ export default function SandboxPage() {
     // End proctoring session after successful submission
     if (result && proctoring.isActive) {
       await proctoring.endSession();
+      // Keep proctoringSessionId set to prevent modal from reappearing
+      // The session is ended (isActive = false) which hides the indicator
     }
 
     return result;

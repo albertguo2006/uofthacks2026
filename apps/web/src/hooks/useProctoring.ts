@@ -134,6 +134,17 @@ export function useProctoring({
         session_id: state.sessionId,
         violation_count: state.violationCount,
       });
+    } catch (error) {
+      console.error('Failed to end proctoring session:', error);
+      // Track the failure
+      track('proctoring_session_end_failed', {
+        task_id: taskId,
+        session_id: state.sessionId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      // Always cleanup state and camera, even if API call fails
+      // The session should end from the user's perspective regardless of backend status
 
       // Stop camera if enabled
       if (streamRef.current) {
@@ -148,8 +159,6 @@ export function useProctoring({
         violationCount: 0,
         status: null,
       });
-    } catch (error) {
-      console.error('Failed to end proctoring session:', error);
     }
   }, [state.sessionId, state.violationCount, taskId]);
 
