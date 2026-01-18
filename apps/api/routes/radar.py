@@ -190,12 +190,59 @@ async def get_my_error_profile(
 @router.post("/intervention/acknowledge")
 async def acknowledge_hint(
     request: AcknowledgeRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """
     Acknowledge that the user has seen/dismissed a hint.
+    Tracks hint_acknowledged event to Amplitude for analytics.
     """
-    await acknowledge_intervention(request.session_id, current_user["user_id"])
+    user_id = current_user["user_id"]
+
+    # Get the intervention being acknowledged for analytics
+    intervention = await Collections.interventions().find_one(
+        {"session_id": request.session_id, "user_id": user_id, "acknowledged": False},
+        sort=[("triggered_at", -1)],
+    )
+
+    # Acknowledge the intervention
+    await acknowledge_intervention(request.session_id, user_id)
+
+    # Track hint_acknowledged event to Amplitude
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": user_id,
+        "session_id": request.session_id,
+        "task_id": intervention.get("task_id") if intervention else None,
+        "event_type": "hint_acknowledged",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "hint_category": intervention.get("hint_category") if intervention else None,
+            "intervention_type": intervention.get("intervention_type") if intervention else None,
+            "trigger_reason": intervention.get("trigger_reason") if intervention else None,
+            "hint_style": intervention.get("hint_style") if intervention else None,
+            "personalization_badge": intervention.get("personalization_badge") if intervention else None,
+        },
+        "forwarded_to_amplitude": False,
+    }
+    await Collections.events().insert_one(event_doc)
+
+    # Forward to Amplitude in background
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=user_id,
+        event_type="hint_acknowledged",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "session_id": request.session_id,
+            "task_id": intervention.get("task_id") if intervention else None,
+            "hint_category": intervention.get("hint_category") if intervention else None,
+            "intervention_type": intervention.get("intervention_type") if intervention else None,
+            "trigger_reason": intervention.get("trigger_reason") if intervention else None,
+        },
+    )
 
     return {"status": "acknowledged", "session_id": request.session_id}
 
@@ -203,17 +250,65 @@ async def acknowledge_hint(
 @router.post("/intervention/effectiveness")
 async def report_intervention_effectiveness(
     request: EffectivenessRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """
     Report whether an intervention was effective.
     Called after user makes progress following a hint.
+    Tracks hint_effectiveness event to Amplitude for analytics.
     """
+    user_id = current_user["user_id"]
+
+    # Get the most recent acknowledged intervention for this session
+    intervention = await Collections.interventions().find_one(
+        {"session_id": request.session_id, "user_id": user_id, "acknowledged": True},
+        sort=[("triggered_at", -1)],
+    )
+
+    # Track effectiveness
     await track_intervention_effectiveness(
         session_id=request.session_id,
-        user_id=current_user["user_id"],
+        user_id=user_id,
         code_changed=request.code_changed,
         issue_resolved=request.issue_resolved,
+    )
+
+    # Track hint_effectiveness event to Amplitude
+    event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": user_id,
+        "session_id": request.session_id,
+        "task_id": intervention.get("task_id") if intervention else None,
+        "event_type": "hint_effectiveness_reported",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "code_changed": request.code_changed,
+            "issue_resolved": request.issue_resolved,
+            "hint_category": intervention.get("hint_category") if intervention else None,
+            "intervention_type": intervention.get("intervention_type") if intervention else None,
+            "trigger_reason": intervention.get("trigger_reason") if intervention else None,
+            "hint_style": intervention.get("hint_style") if intervention else None,
+        },
+        "forwarded_to_amplitude": False,
+    }
+    await Collections.events().insert_one(event_doc)
+
+    # Forward to Amplitude in background
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=user_id,
+        event_type="hint_effectiveness_reported",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+        properties={
+            "session_id": request.session_id,
+            "code_changed": request.code_changed,
+            "issue_resolved": request.issue_resolved,
+            "hint_category": intervention.get("hint_category") if intervention else None,
+            "trigger_reason": intervention.get("trigger_reason") if intervention else None,
+        },
     )
 
     return {
@@ -227,10 +322,12 @@ async def report_intervention_effectiveness(
 @router.get("/session/{session_id}/intervention")
 async def get_session_intervention(
     session_id: str,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """
     Get the current intervention for a specific session.
+    Tracks hint_displayed event when a hint is shown for the first time.
     """
     session = await Collections.sessions().find_one({"session_id": session_id})
 
@@ -248,6 +345,52 @@ async def get_session_intervention(
     if not ai_context.get("is_stuck"):
         return {"intervention": None}
 
+    user_id = current_user["user_id"]
+
+    # Track hint_displayed event (only once per intervention)
+    # Check if we already tracked display for this hint
+    hint_triggered_at = ai_context.get("stuck_since")
+    if hint_triggered_at and not ai_context.get("display_tracked"):
+        # Mark as tracked
+        await Collections.sessions().update_one(
+            {"session_id": session_id},
+            {"$set": {"ai_context.display_tracked": True}}
+        )
+
+        # Track hint_displayed event to Amplitude
+        event_id = str(ObjectId())
+        event_doc = {
+            "_id": event_id,
+            "user_id": user_id,
+            "session_id": session_id,
+            "task_id": session.get("task_id"),
+            "event_type": "hint_displayed",
+            "timestamp": datetime.utcnow(),
+            "properties": {
+                "hint_category": ai_context.get("hint_category"),
+                "intervention_type": ai_context.get("intervention_type"),
+                "trigger_reason": ai_context.get("trigger_reason"),
+                "hint_style": ai_context.get("hint_style"),
+                "personalization_badge": ai_context.get("personalization_badge"),
+            },
+            "forwarded_to_amplitude": False,
+        }
+        await Collections.events().insert_one(event_doc)
+
+        background_tasks.add_task(
+            forward_to_amplitude,
+            event_id=event_id,
+            user_id=user_id,
+            event_type="hint_displayed",
+            timestamp=int(event_doc["timestamp"].timestamp() * 1000),
+            properties={
+                "session_id": session_id,
+                "hint_category": ai_context.get("hint_category"),
+                "intervention_type": ai_context.get("intervention_type"),
+                "trigger_reason": ai_context.get("trigger_reason"),
+            },
+        )
+
     return {
         "intervention": {
             "hint": ai_context.get("last_hint"),
@@ -258,6 +401,7 @@ async def get_session_intervention(
             "models_used": ai_context.get("models_used", []),
             "personalization_badge": ai_context.get("personalization_badge"),
             "hint_style": ai_context.get("hint_style"),
+            "trigger_reason": ai_context.get("trigger_reason"),
         }
     }
 

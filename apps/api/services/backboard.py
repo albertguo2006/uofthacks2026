@@ -612,12 +612,13 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
         )
 
     # =========================================================================
-    # ADAPTIVE INTERVENTION - Intelligent model routing
+    # ADAPTIVE INTERVENTION - Intelligent model routing with rich context
     # =========================================================================
 
     async def adaptive_intervention(self, session_context: dict, error_profile: dict = None) -> dict:
         """
-        Intelligently choose intervention type and model based on context.
+        Intelligently choose intervention type and model based on rich behavioral context.
+        Uses user's actual code, past problems, and behavioral patterns for personalized hints.
         """
         code = session_context.get("code", "")
         last_error = session_context.get("last_error")
@@ -625,16 +626,52 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
         time_stuck_ms = session_context.get("time_stuck_ms", 0)
         attempt_count = session_context.get("attempt_count", 1)
 
-        print(f"\n{BLUE}[Intervention] Evaluating... (errors: {error_streak}, stuck: {time_stuck_ms // 1000}s){RESET}")
+        # Enhanced context from behavioral analysis
+        recent_errors = session_context.get("recent_errors", [])
+        error_pattern = session_context.get("error_pattern")
+        repeated_same_error = session_context.get("repeated_same_error", False)
+        task_description = session_context.get("task_description", "")
+        intervention_reason = session_context.get("intervention_reason", "unknown")
+        tests_passed_trend = session_context.get("tests_passed_trend", "stable")
+
+        print(f"\n{BLUE}[Intervention] Evaluating... (errors: {error_streak}, stuck: {time_stuck_ms // 1000}s, reason: {intervention_reason}){RESET}")
 
         use_personalized = error_profile and error_profile.get("has_data", False)
 
-        if error_streak >= 3 and last_error:
+        # Build rich error context for the AI
+        error_context = self._build_error_context(
+            last_error=last_error,
+            recent_errors=recent_errors,
+            error_pattern=error_pattern,
+            repeated_same_error=repeated_same_error,
+        )
+
+        # Determine intervention type based on the trigger reason
+        if intervention_reason == "repeated_same_error" or repeated_same_error:
+            # User keeps making the same mistake - need a different approach
+            hint = await self.generate_targeted_hint(
+                code=code,
+                error_context=error_context,
+                task_description=task_description,
+                attempt_count=attempt_count,
+                hint_type="different_approach",
+                error_profile=error_profile if use_personalized else None,
+            )
+            return {
+                "type": "technical_hint",
+                "hint": hint["hint"],
+                "personalization_badge": hint.get("personalization_badge", "Trying a different approach"),
+                "hint_style": hint.get("hint_style", "alternative"),
+                "model_used": ["gpt-4o"],
+            }
+
+        elif error_streak >= 3 and last_error:
+            # Multiple errors - provide technical analysis
             analysis = await self.analyze_code_error(code, last_error)
 
             if use_personalized:
                 hint_result = await self.generate_personalized_hint(
-                    code, last_error, attempt_count, error_profile
+                    code, error_context, attempt_count, error_profile
                 )
                 return {
                     "type": "technical_hint",
@@ -645,7 +682,7 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                     "model_used": ["gpt-4o-mini", "claude-3-haiku"],
                 }
             else:
-                hint = await self.generate_hint(code, last_error, attempt_count)
+                hint = await self.generate_hint(code, error_context, attempt_count)
                 return {
                     "type": "technical_hint",
                     "analysis": analysis,
@@ -653,11 +690,29 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                     "model_used": ["gpt-4o-mini", "claude-3-haiku"],
                 }
 
-        elif time_stuck_ms > 180000:
+        elif intervention_reason == "declining_performance" or tests_passed_trend == "declining":
+            # Tests were passing but now failing - something broke
+            hint = await self.generate_targeted_hint(
+                code=code,
+                error_context=error_context,
+                task_description=task_description,
+                attempt_count=attempt_count,
+                hint_type="regression",
+                error_profile=error_profile if use_personalized else None,
+            )
+            return {
+                "type": "technical_hint",
+                "hint": hint["hint"],
+                "personalization_badge": hint.get("personalization_badge", "Something changed"),
+                "hint_style": hint.get("hint_style", "diagnostic"),
+                "model_used": ["gpt-4o"],
+            }
+
+        elif time_stuck_ms > 180000 or intervention_reason == "time_stuck":
             if use_personalized:
                 hint_result = await self.generate_personalized_hint(
                     code,
-                    "User seems stuck (no progress for 3 minutes)",
+                    error_context or "User seems stuck (no progress for 3 minutes)",
                     attempt_count,
                     error_profile
                 )
@@ -675,7 +730,7 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
             else:
                 hint = await self.generate_hint(
                     code,
-                    "User seems stuck (no progress for 3 minutes)",
+                    error_context or "User seems stuck (no progress for 3 minutes)",
                     attempt_count,
                 )
                 encouragement = await self.generate_encouragement(
@@ -688,10 +743,28 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                     "model_used": ["claude-3-haiku"],
                 }
 
+        elif intervention_reason == "stuck_not_changing_code":
+            # User is stuck but not typing - might be confused
+            hint = await self.generate_targeted_hint(
+                code=code,
+                error_context=error_context,
+                task_description=task_description,
+                attempt_count=attempt_count,
+                hint_type="getting_started",
+                error_profile=error_profile if use_personalized else None,
+            )
+            return {
+                "type": "gentle_nudge",
+                "hint": hint["hint"],
+                "personalization_badge": hint.get("personalization_badge", "Getting unstuck"),
+                "hint_style": hint.get("hint_style", "guiding"),
+                "model_used": ["gpt-4o"],
+            }
+
         elif error_streak >= 2:
             if use_personalized:
                 hint_result = await self.generate_personalized_hint(
-                    code, last_error or "struggling", attempt_count, error_profile
+                    code, error_context or "struggling", attempt_count, error_profile
                 )
                 return {
                     "type": "gentle_nudge",
@@ -702,7 +775,7 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                 }
             else:
                 hint = await self.generate_hint(
-                    code, last_error or "struggling", attempt_count
+                    code, error_context or "struggling", attempt_count
                 )
                 return {
                     "type": "gentle_nudge",
@@ -711,6 +784,130 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
                 }
 
         return {"type": "none"}
+
+    def _build_error_context(
+        self,
+        last_error: str,
+        recent_errors: list,
+        error_pattern: str,
+        repeated_same_error: bool,
+    ) -> str:
+        """Build a rich error context string for hint generation."""
+        if not last_error and not recent_errors:
+            return ""
+
+        context_parts = []
+
+        if last_error:
+            context_parts.append(f"Current error: {last_error[:300]}")
+
+        if repeated_same_error:
+            context_parts.append("NOTE: User has been getting the SAME error repeatedly.")
+
+        if error_pattern:
+            context_parts.append(f"Error pattern detected: {error_pattern}")
+
+        if len(recent_errors) > 1:
+            context_parts.append(f"Recent errors ({len(recent_errors)}): {', '.join(e[:50] for e in recent_errors[:3])}")
+
+        return "\n".join(context_parts)
+
+    async def generate_targeted_hint(
+        self,
+        code: str,
+        error_context: str,
+        task_description: str,
+        attempt_count: int,
+        hint_type: str,
+        error_profile: dict = None,
+    ) -> dict:
+        """
+        Generate a targeted hint based on specific intervention reasons.
+        """
+        print(f"\n{MAGENTA}[Hint] Generating TARGETED hint (type: {hint_type}, attempt #{attempt_count}){RESET}")
+
+        # Build system prompt based on hint type
+        if hint_type == "different_approach":
+            system_prompt = """You are a coding mentor helping a student who keeps making the same error.
+
+Rules:
+- They've tried the same thing multiple times without success
+- Suggest a COMPLETELY DIFFERENT approach to solve the problem
+- Don't just fix the syntax - help them think about it differently
+- Be encouraging but direct about trying something new
+- Keep it brief (2-3 sentences)
+- Don't give away the full solution"""
+
+        elif hint_type == "regression":
+            system_prompt = """You are a coding mentor helping a student whose tests were passing but are now failing.
+
+Rules:
+- Something they changed broke what was working
+- Help them identify what might have changed
+- Suggest using version control or undo to compare
+- Ask them to think about what they last modified
+- Keep it brief (2-3 sentences)"""
+
+        elif hint_type == "getting_started":
+            system_prompt = """You are a coding mentor helping a student who seems stuck and isn't making changes.
+
+Rules:
+- They might be confused about where to start
+- Give them a concrete first step to try
+- Break the problem down into a smaller piece
+- Be encouraging and help them get momentum
+- Keep it brief (2-3 sentences)"""
+
+        else:
+            system_prompt = """You are an encouraging coding mentor.
+
+Rules:
+- Give a brief, helpful hint (2-3 sentences)
+- Don't give away the answer
+- Be specific to their code and error
+- Be encouraging"""
+
+        # Build personalization context
+        personalization_badge = "Helpful hint"
+        hint_style = hint_type
+
+        if error_profile and error_profile.get("has_data"):
+            dominant_category = error_profile.get("dominant_category", "logic")
+            trend = error_profile.get("recent_trend", "stable")
+
+            if trend == "improving":
+                personalization_badge = f"You're making progress! (Based on your {dominant_category} patterns)"
+            elif trend == "struggling":
+                personalization_badge = f"Tailored for your {dominant_category} challenges"
+            else:
+                personalization_badge = f"Based on your coding patterns"
+
+        user_message = f"""Task: {task_description[:500] if task_description else 'Unknown task'}
+
+Student's current code:
+```
+{code[:1500]}
+```
+
+{error_context}
+
+This is attempt #{attempt_count}. Please provide a helpful hint."""
+
+        hint = await self._call_model(
+            assistant_name=f"TargetedHintAssistant_{hint_type}",
+            system_prompt=system_prompt,
+            user_message=user_message,
+            llm_provider="openai",
+            model_name="gpt-4o",
+            thread_key=f"targeted_hints:{self.user_id}:{hint_type}",
+            use_memory=True,
+        )
+
+        return {
+            "hint": hint,
+            "personalization_badge": personalization_badge,
+            "hint_style": hint_style,
+        }
 
     # =========================================================================
     # CONTEXTUAL HINTS - Enhanced with code history (Feature 1)
