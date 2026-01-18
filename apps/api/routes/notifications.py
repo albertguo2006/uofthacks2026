@@ -183,9 +183,10 @@ async def send_interview_request(
     # Get recruiter's company info (if available)
     recruiter = await Collections.users().find_one({"_id": current_user["user_id"]})
 
-    # Create notification
+    # Create notification - ensure recipient_id is stored as string to match auth.py format
+    candidate_id_str = str(candidate.get("_id", interview_request.candidate_id))
     notification_data = {
-        "recipient_id": interview_request.candidate_id,
+        "recipient_id": candidate_id_str,
         "sender_id": current_user["user_id"],
         "type": "interview_request",
         "title": f"Interview Request from {interview_request.company_name}",

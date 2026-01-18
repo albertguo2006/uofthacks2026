@@ -124,7 +124,7 @@ async def get_candidates(
             metrics = passport["metrics"]
 
         candidates.append({
-            "user_id": user_id,
+            "user_id": str(user_id),
             "display_name": user.get("display_name", ""),
             "email": user.get("email", ""),
             "archetype": user_archetype,
@@ -183,7 +183,7 @@ async def get_ranked_candidates(
         passport = await Collections.passports().find_one({"user_id": user["_id"]})
         
         candidates.append({
-            "user_id": user["_id"],
+            "user_id": str(user["_id"]),
             "display_name": user.get("display_name", "Unknown"),
             "email": user.get("email"),
             "archetype": user.get("archetype") or (passport.get("archetype") if passport else None),
