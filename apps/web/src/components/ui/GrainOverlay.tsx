@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
+//no lnger used to minimize lag :(
+
 export default function GrainOverlay() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: -1000, y: -1000 });
@@ -15,10 +17,10 @@ export default function GrainOverlay() {
 
     let animationId: number;
     let lastTime = 0;
-    const fps = 10; // Very slow refresh rate
+    const fps = 8; // Very slow refresh rate
     const frameInterval = 1000 / fps;
     const grainSize = 1; // Size of each grain in pixels
-    const spacing = 4; // Space between grains (larger = more spaced out)
+    const spacing = 1000; // Space between grains (larger = more spaced out)
     const mouseInfluenceRadius = 100; // How far the mouse affects grains
 
     const resize = () => {
