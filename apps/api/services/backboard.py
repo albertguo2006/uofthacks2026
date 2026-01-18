@@ -102,6 +102,7 @@ class BackboardService:
     ) -> str:
         """
         Generic model call using Backboard SDK.
+        Falls back to Gemini if Backboard fails (timeout, no credits, etc.)
         """
         # Log the prompt
         print(f"\n{CYAN}╭─────────────────────────────────────────────────────────────╮{RESET}")
@@ -116,20 +117,22 @@ class BackboardService:
         print(f"{CYAN}╰─────────────────────────────────────────────────────────────╯{RESET}")
 
         if not self.client:
-            print(f"{YELLOW}[Backboard] Skipped - API key not configured, using fallback{RESET}")
-            return self._fallback_response([{"content": user_message}])
+            print(f"{YELLOW}[Backboard] Skipped - API key not configured, falling back to Gemini{RESET}")
+            return await self._gemini_fallback(system_prompt, user_message, thread_key)
 
         try:
             # Get or create assistant
             assistant_id = await self._get_or_create_assistant(assistant_name, system_prompt)
             if not assistant_id:
-                return self._fallback_response([{"content": user_message}])
+                print(f"{YELLOW}[Backboard] Failed to create assistant, falling back to Gemini{RESET}")
+                return await self._gemini_fallback(system_prompt, user_message, thread_key)
 
             # Get or create thread (use user_id + thread_key for uniqueness)
             actual_thread_key = f"{self.user_id}:{thread_key}" if thread_key else f"{self.user_id}:default"
             thread_id = await self._get_or_create_thread(assistant_id, actual_thread_key)
             if not thread_id:
-                return self._fallback_response([{"content": user_message}])
+                print(f"{YELLOW}[Backboard] Failed to create thread, falling back to Gemini{RESET}")
+                return await self._gemini_fallback(system_prompt, user_message, thread_key)
 
             # Send message
             response = await self.client.add_message(
@@ -149,7 +152,8 @@ class BackboardService:
 
         except Exception as e:
             print(f"{RED}[Backboard] ✗ Error calling {model_name}: {e}{RESET}")
-            return self._fallback_response([{"content": user_message}])
+            print(f"{YELLOW}[Backboard] Falling back to Gemini...{RESET}")
+            return await self._gemini_fallback(system_prompt, user_message, thread_key)
 
     def _fallback_response(self, messages: list) -> str:
         """Provide a fallback response when API is unavailable."""
@@ -162,6 +166,37 @@ class BackboardService:
         ]
         import random
         return random.choice(fallback_hints)
+
+    async def _gemini_fallback(
+        self,
+        system_prompt: str,
+        user_message: str,
+        thread_key: Optional[str] = None,
+    ) -> str:
+        """
+        Fallback to Gemini when Backboard is unavailable (timeout, no credits, etc.)
+        Combines system prompt and user message for Gemini's format.
+        """
+        print(f"{YELLOW}[Fallback] Using Gemini as fallback for Backboard{RESET}")
+
+        # Build session key for conversation continuity if thread_key provided
+        session_key = f"{self.user_id}:fallback:{thread_key}" if thread_key else None
+
+        # Call Gemini with the system prompt as instruction
+        result = await self._call_gemini(
+            prompt=user_message,
+            system_instruction=system_prompt,
+            session_key=session_key,
+            temperature=0.7,
+            max_tokens=500,
+        )
+
+        # If Gemini also fails, return the basic fallback
+        if not result or result == self._fallback_response([]):
+            print(f"{RED}[Fallback] Gemini also failed, using basic fallback{RESET}")
+            return self._fallback_response([{"content": user_message}])
+
+        return result
 
     def _strip_markdown_json(self, response: str) -> str:
         """Strip markdown code blocks from JSON response."""
@@ -271,6 +306,25 @@ class BackboardService:
         """Clear Gemini conversation history for a session."""
         if session_key in self._gemini_history:
             del self._gemini_history[session_key]
+
+    async def clear_user_memory(self, memory_key: str):
+        """
+        Clear memory for a specific context.
+        Clears both Backboard thread cache and Gemini history.
+        """
+        # Clear Gemini history for this key
+        self.clear_gemini_history(memory_key)
+
+        # Clear fallback Gemini history as well
+        fallback_key = f"{self.user_id}:fallback:{memory_key}"
+        self.clear_gemini_history(fallback_key)
+
+        # Clear from thread cache if exists
+        keys_to_remove = [k for k in _thread_cache.keys() if memory_key in k]
+        for key in keys_to_remove:
+            del _thread_cache[key]
+
+        print(f"{DIM}[Memory] Cleared memory for key: {memory_key}{RESET}")
 
     # =========================================================================
     # HINT GENERATION - Claude (empathetic, pedagogical)

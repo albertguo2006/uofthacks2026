@@ -432,138 +432,210 @@ class ContextualHintResponse(BaseModel):
 
 
 # =========================================================================
-# DEMO MODE - Frustration trigger for demonstrations
+# FRUSTRATION TRACKING - Real-time frustration level for hint unlocking
 # =========================================================================
 
+# Threshold for unlocking hints (0-1 scale)
+FRUSTRATION_THRESHOLD = 0.5
 
-class FrustrationTriggerRequest(BaseModel):
+# How much each "!" keypress boosts frustration (for demo)
+DEMO_BOOST_AMOUNT = 0.15
+
+
+class FrustrationBoostRequest(BaseModel):
     session_id: str
     task_id: str
-    current_code: str
-    intensity: str = "high"  # low, medium, high
 
 
-@router.post("/demo/trigger-frustration")
-async def trigger_frustration_demo(
-    request: FrustrationTriggerRequest,
+class FrustrationStatusResponse(BaseModel):
+    frustration_score: float
+    threshold: float
+    hint_unlocked: bool
+    contributing_factors: dict
+    demo_boosts: int
+
+
+@router.get("/session/{session_id}/frustration", response_model=FrustrationStatusResponse)
+async def get_frustration_status(
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Get current frustration level for a session.
+    Used to determine if "Need a Hint?" button should be unlocked.
+    """
+    user_id = current_user["user_id"]
+
+    # Get session
+    session = await Collections.sessions().find_one({"session_id": session_id})
+
+    if not session:
+        # No session yet - return baseline
+        return FrustrationStatusResponse(
+            frustration_score=0.0,
+            threshold=FRUSTRATION_THRESHOLD,
+            hint_unlocked=False,
+            contributing_factors={},
+            demo_boosts=0,
+        )
+
+    # Get demo boost count from session
+    demo_boosts = session.get("frustration_context", {}).get("demo_boosts", 0)
+    demo_boost_score = min(0.5, demo_boosts * DEMO_BOOST_AMOUNT)  # Cap at 0.5 from boosts
+
+    # Fetch recent events for natural frustration calculation
+    recent_events = (
+        await Collections.events()
+        .find({"session_id": session_id})
+        .sort("timestamp", -1)
+        .limit(30)
+        .to_list(30)
+    )
+
+    # Calculate natural frustration from behavior
+    natural_frustration = calculate_natural_frustration(recent_events, session)
+
+    # Combine natural + demo boost
+    total_frustration = min(1.0, natural_frustration["score"] + demo_boost_score)
+
+    return FrustrationStatusResponse(
+        frustration_score=round(total_frustration, 2),
+        threshold=FRUSTRATION_THRESHOLD,
+        hint_unlocked=total_frustration >= FRUSTRATION_THRESHOLD,
+        contributing_factors={
+            **natural_frustration["factors"],
+            "demo_boosts": demo_boosts,
+            "demo_boost_score": round(demo_boost_score, 2),
+        },
+        demo_boosts=demo_boosts,
+    )
+
+
+@router.post("/session/{session_id}/frustration/boost")
+async def boost_frustration(
+    session_id: str,
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Demo endpoint to manually trigger frustration detection and generate a hint.
-    Use this during demos to show the AI intervention system in action.
+    Boost frustration level (triggered by '!' keypress during demo).
+    Each boost adds DEMO_BOOST_AMOUNT to the frustration score.
     """
     user_id = current_user["user_id"]
 
-    # Create simulated behavior analysis based on intensity
-    intensity_configs = {
-        "low": {"frustration_score": 0.4, "error_streak": 2, "time_stuck_ms": 60000},
-        "medium": {"frustration_score": 0.6, "error_streak": 3, "time_stuck_ms": 120000},
-        "high": {"frustration_score": 0.85, "error_streak": 5, "time_stuck_ms": 180000},
-    }
-
-    config = intensity_configs.get(request.intensity, intensity_configs["high"])
-
-    simulated_behavior = {
-        "frustration_score": config["frustration_score"],
-        "error_streak": config["error_streak"],
-        "time_stuck_ms": config["time_stuck_ms"],
-        "repeated_same_error": True,
-        "tests_passed_trend": "declining",
-        "code_change_frequency": "minimal",
-        "last_error": "Simulated error for demo",
-        "recent_errors": ["Error 1", "Error 2", "Error 3"],
-    }
-
-    # Get task info
-    task = await Collections.tasks().find_one({"task_id": request.task_id})
-    task_description = task.get("description", "Unknown task") if task else "Demo task"
-
-    # Generate hint using Backboard
-    backboard = BackboardService(user_id)
-
-    session_context = {
-        "code": request.current_code,
-        "last_error": "Demo: User triggered frustration signal",
-        "error_streak": config["error_streak"],
-        "time_stuck_ms": config["time_stuck_ms"],
-        "attempt_count": config["error_streak"],
-        "recent_errors": simulated_behavior["recent_errors"],
-        "repeated_same_error": True,
-        "task_description": task_description,
-        "intervention_reason": "demo_frustration_trigger",
-    }
-
-    # Get hint from AI
-    intervention = await backboard.adaptive_intervention(session_context, {})
-
-    if intervention["type"] == "none":
-        # Fallback hint if AI doesn't generate one
-        intervention = {
-            "type": "technical_hint",
-            "hint": "It looks like you're working through a challenging problem. Take a moment to review your approach - sometimes stepping back helps!",
-            "analysis": {"error_type": "demo"},
-            "model_used": ["fallback"],
-        }
-
-    # Store intervention in session
-    await Collections.sessions().update_one(
-        {"session_id": request.session_id},
+    # Increment demo boost counter in session
+    result = await Collections.sessions().find_one_and_update(
+        {"session_id": session_id},
         {
-            "$set": {
-                "ai_context.is_stuck": True,
-                "ai_context.last_hint": intervention.get("hint"),
-                "ai_context.intervention_type": "demo_triggered",
-                "ai_context.models_used": intervention.get("model_used", []),
-                "ai_context.analysis": intervention.get("analysis"),
-                "ai_context.stuck_since": datetime.utcnow(),
-                "ai_context.hint_category": "approach",
-                "ai_context.trigger_reason": "demo_frustration_trigger",
-            },
-            "$inc": {"ai_context.intervention_count": 1},
+            "$inc": {"frustration_context.demo_boosts": 1},
+            "$set": {"frustration_context.last_boost": datetime.utcnow()},
         },
         upsert=True,
+        return_document=True,
     )
 
-    # Store intervention record with behavior analysis
-    hint_id = str(ObjectId())
-    await Collections.interventions().insert_one({
-        "_id": hint_id,
-        "session_id": request.session_id,
-        "user_id": user_id,
-        "task_id": request.task_id,
-        "triggered_at": datetime.utcnow(),
-        "trigger_reason": "demo_frustration_trigger",
-        "intervention_type": "demo_triggered",
-        "models_used": intervention.get("model_used", []),
-        "hint_text": intervention.get("hint"),
-        "hint_category": "approach",
-        "behavior_analysis": simulated_behavior,
-        "acknowledged": False,
-    })
+    demo_boosts = result.get("frustration_context", {}).get("demo_boosts", 1) if result else 1
+    demo_boost_score = min(0.5, demo_boosts * DEMO_BOOST_AMOUNT)
 
     # Track event to Amplitude
     event_id = str(ObjectId())
+    event_doc = {
+        "_id": event_id,
+        "user_id": user_id,
+        "session_id": session_id,
+        "event_type": "frustration_boost",
+        "timestamp": datetime.utcnow(),
+        "properties": {
+            "boost_number": demo_boosts,
+            "demo_mode": True,
+        },
+        "forwarded_to_amplitude": False,
+    }
+    await Collections.events().insert_one(event_doc)
+
     background_tasks.add_task(
         forward_to_amplitude,
         event_id=event_id,
         user_id=user_id,
-        event_type="frustration_signal",
-        timestamp=int(datetime.utcnow().timestamp() * 1000),
+        event_type="frustration_boost",
+        timestamp=int(event_doc["timestamp"].timestamp() * 1000),
         properties={
-            "session_id": request.session_id,
-            "task_id": request.task_id,
-            "intensity": request.intensity,
+            "session_id": session_id,
+            "boost_number": demo_boosts,
             "demo_mode": True,
         },
     )
 
     return {
-        "status": "hint_triggered",
-        "hint": intervention.get("hint"),
-        "behavior_analysis": simulated_behavior,
-        "hint_id": hint_id,
+        "status": "boosted",
+        "demo_boosts": demo_boosts,
+        "demo_boost_score": round(demo_boost_score, 2),
+        "message": f"Frustration boosted! ({demo_boosts} boosts = +{round(demo_boost_score * 100)}%)",
     }
+
+
+def calculate_natural_frustration(events: list, session: dict) -> dict:
+    """
+    Calculate natural frustration score from behavioral events.
+    Returns score (0-1) and contributing factors.
+    """
+    factors = {
+        "error_streak": 0,
+        "time_stuck_minutes": 0,
+        "failed_runs": 0,
+        "minimal_progress": False,
+    }
+
+    if not events:
+        return {"score": 0.0, "factors": factors}
+
+    # Count error streak
+    error_streak = 0
+    for event in events:
+        if event.get("event_type") == "error_emitted":
+            error_streak += 1
+        elif event.get("event_type") in ["test_cases_ran", "run_attempted"]:
+            props = event.get("properties", {})
+            if props.get("passed") or props.get("tests_passed", 0) > 0:
+                break
+    factors["error_streak"] = error_streak
+
+    # Count failed runs
+    failed_runs = sum(
+        1 for e in events
+        if e.get("event_type") in ["test_cases_ran", "run_attempted"]
+        and not e.get("properties", {}).get("passed", False)
+    )
+    factors["failed_runs"] = failed_runs
+
+    # Calculate time stuck (from session start or last success)
+    session_start = session.get("started_at", datetime.utcnow())
+    if isinstance(session_start, datetime):
+        time_stuck_ms = (datetime.utcnow() - session_start).total_seconds() * 1000
+        factors["time_stuck_minutes"] = round(time_stuck_ms / 60000, 1)
+
+    # Check for minimal code changes
+    code_events = [e for e in events if e.get("event_type") == "code_changed"]
+    if len(code_events) < 3:
+        factors["minimal_progress"] = True
+
+    # Calculate score (0-1)
+    score = 0.0
+
+    # Error streak contribution (max 0.3)
+    score += min(0.3, error_streak * 0.1)
+
+    # Failed runs contribution (max 0.2)
+    score += min(0.2, failed_runs * 0.04)
+
+    # Time stuck contribution (max 0.3)
+    score += min(0.3, factors["time_stuck_minutes"] * 0.05)
+
+    # Minimal progress penalty (0.1)
+    if factors["minimal_progress"]:
+        score += 0.1
+
+    return {"score": min(1.0, score), "factors": factors}
 
 
 @router.post("/session/hints", response_model=ContextualHintResponse)

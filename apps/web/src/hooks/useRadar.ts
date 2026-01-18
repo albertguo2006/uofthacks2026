@@ -236,53 +236,102 @@ export function useSessionIntervention(sessionId: string | null) {
     }
   }, [sessionId]);
 
-  /**
-   * Demo mode: Trigger frustration signal to immediately get a hint
-   * Use this during demos to show the AI intervention system
-   */
-  const triggerFrustration = useCallback(async (
-    taskId: string,
-    currentCode: string,
-    intensity: 'low' | 'medium' | 'high' = 'high',
-  ) => {
-    if (!sessionId) return null;
-
-    try {
-      const response = await api.post<{
-        status: string;
-        hint: string;
-        behavior_analysis: BehaviorAnalysis;
-        hint_id: string;
-      }>('/radar/demo/trigger-frustration', {
-        session_id: sessionId,
-        task_id: taskId,
-        current_code: currentCode,
-        intensity,
-      });
-
-      // Update local intervention state
-      setIntervention({
-        hint: response.hint,
-        hint_category: 'approach',
-        intervention_type: 'demo_triggered',
-        session_id: sessionId,
-        trigger_reason: 'demo_frustration_trigger',
-        behavior_analysis: response.behavior_analysis,
-      });
-
-      return response;
-    } catch (err) {
-      console.error('Failed to trigger frustration demo:', err);
-      return null;
-    }
-  }, [sessionId]);
-
   return {
     intervention,
     isLoading,
     acknowledgeHint,
     refetch: fetchIntervention,
     requestContextualHint,
-    triggerFrustration,
+  };
+}
+
+/**
+ * Hook for tracking frustration level and unlocking hints
+ */
+export interface FrustrationStatus {
+  frustration_score: number;
+  threshold: number;
+  hint_unlocked: boolean;
+  contributing_factors: {
+    error_streak?: number;
+    time_stuck_minutes?: number;
+    failed_runs?: number;
+    minimal_progress?: boolean;
+    demo_boosts?: number;
+    demo_boost_score?: number;
+  };
+  demo_boosts: number;
+}
+
+export function useFrustrationTracking(sessionId: string | null) {
+  const [frustrationStatus, setFrustrationStatus] = useState<FrustrationStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchFrustration = useCallback(async () => {
+    if (!sessionId) return;
+
+    try {
+      const response = await api.get<FrustrationStatus>(
+        `/radar/session/${sessionId}/frustration`
+      );
+      setFrustrationStatus(response);
+    } catch (err) {
+      console.debug('Failed to fetch frustration status:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId]);
+
+  // Initial fetch
+  useEffect(() => {
+    if (sessionId) {
+      setIsLoading(true);
+      fetchFrustration();
+    }
+  }, [sessionId, fetchFrustration]);
+
+  // Poll for frustration updates
+  useEffect(() => {
+    if (sessionId) {
+      intervalRef.current = setInterval(fetchFrustration, 2000);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [sessionId, fetchFrustration]);
+
+  /**
+   * Boost frustration (called when user presses '!')
+   */
+  const boostFrustration = useCallback(async () => {
+    if (!sessionId) return null;
+
+    try {
+      const response = await api.post<{
+        status: string;
+        demo_boosts: number;
+        demo_boost_score: number;
+        message: string;
+      }>(`/radar/session/${sessionId}/frustration/boost`);
+
+      // Immediately refetch to update UI
+      await fetchFrustration();
+
+      return response;
+    } catch (err) {
+      console.error('Failed to boost frustration:', err);
+      return null;
+    }
+  }, [sessionId, fetchFrustration]);
+
+  return {
+    frustrationStatus,
+    isLoading,
+    boostFrustration,
+    refetch: fetchFrustration,
   };
 }

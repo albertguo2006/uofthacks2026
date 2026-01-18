@@ -6,6 +6,7 @@ import { CodeEditor } from '@/components/sandbox/CodeEditor';
 import { OutputPanel } from '@/components/sandbox/OutputPanel';
 import { TaskHeader } from '@/components/sandbox/TaskHeader';
 import { HintPanel } from '@/components/sandbox/HintPanel';
+import { FrustrationMeter } from '@/components/sandbox/FrustrationMeter';
 import { TaskHelpChat } from '@/components/sandbox/TaskHelpChat';
 import { LanguageSelector } from '@/components/sandbox/LanguageSelector';
 import { ProctoringModal } from '@/components/proctoring/ProctoringModal';
@@ -15,7 +16,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { useProctoring } from '@/hooks/useProctoring';
 import { Task, Language } from '@/types/task';
 import { ViolationType } from '@/types/proctoring';
-import { useSessionIntervention } from '@/hooks/useRadar';
+import { useSessionIntervention, useFrustrationTracking } from '@/hooks/useRadar';
 import { useSemanticObserver } from '@/hooks/useSemanticObserver';
 import { track } from '@/lib/telemetry';
 import { saveCodeDraft, loadCodeDraft, clearCodeDraft } from '@/lib/codeStorage';
@@ -135,10 +136,13 @@ export default function SandboxPage() {
   });
 
   // AI intervention hook with contextual hints
-  const { intervention, acknowledgeHint, requestContextualHint, triggerFrustration } = useSessionIntervention(sessionId);
+  const { intervention, acknowledgeHint, requestContextualHint } = useSessionIntervention(sessionId);
   const [hintContext, setHintContext] = useState<{ attempts?: number; repeated_errors?: boolean; code_history_length?: number } | undefined>();
   const [isRequestingHint, setIsRequestingHint] = useState(false);
-  const [isTriggeringFrustration, setIsTriggeringFrustration] = useState(false);
+
+  // Frustration tracking for hint unlocking
+  const { frustrationStatus, boostFrustration } = useFrustrationTracking(sessionId);
+  const hintUnlocked = frustrationStatus?.hint_unlocked ?? false;
 
   // Helper to extract stderr from result
   const currentStderr = result?.type === 'run' ? result.data.stderr : undefined;
@@ -236,7 +240,7 @@ export default function SandboxPage() {
   }, [intervention?.hint_category, trackHintAcknowledged, acknowledgeHint]);
 
   const handleRequestHint = useCallback(async () => {
-    if (!taskId || isRequestingHint) return;
+    if (!taskId || isRequestingHint || !hintUnlocked) return;
 
     setIsRequestingHint(true);
     try {
@@ -252,22 +256,28 @@ export default function SandboxPage() {
     } finally {
       setIsRequestingHint(false);
     }
-  }, [taskId, code, currentStderr, requestContextualHint, trackHintDisplayed, isRequestingHint]);
+  }, [taskId, code, currentStderr, requestContextualHint, trackHintDisplayed, isRequestingHint, hintUnlocked]);
 
-  // Demo mode: Trigger frustration to get a hint immediately
-  const handleTriggerFrustration = useCallback(async () => {
-    if (!taskId || isTriggeringFrustration) return;
-
-    setIsTriggeringFrustration(true);
-    try {
-      const response = await triggerFrustration(taskId, code, 'high');
-      if (response) {
-        trackHintDisplayed('demo');
+  // Keyboard listener for "!" to boost frustration (demo mode)
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Check if "!" is pressed (Shift + 1)
+      if (e.key === '!' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Don't trigger if user is typing in an input field (except Monaco editor)
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+        // Boost frustration
+        boostFrustration();
       }
-    } finally {
-      setIsTriggeringFrustration(false);
-    }
-  }, [taskId, code, triggerFrustration, trackHintDisplayed, isTriggeringFrustration]);
+    };
+
+    window.addEventListener('keypress', handleKeyPress);
+    return () => {
+      window.removeEventListener('keypress', handleKeyPress);
+    };
+  }, [boostFrustration]);
 
   // Show proctoring modal for proctored tasks
   if (isProctored && !proctoringSessionId) {
@@ -327,46 +337,62 @@ export default function SandboxPage() {
 
       <TaskHeader task={task} />
 
-      {/* AI Hint Panel */}
-      {intervention?.hint ? (
-        <div className="mt-2">
+      {/* Frustration Meter & AI Hint Panel */}
+      <div className="mt-2 space-y-2">
+        {/* Frustration meter - always visible */}
+        <div className="flex items-center justify-between">
+          <FrustrationMeter status={frustrationStatus} onBoost={boostFrustration} />
+
+          {/* Hint button - locked until frustration threshold reached */}
+          {!intervention?.hint && (
+            <button
+              onClick={handleRequestHint}
+              disabled={isRequestingHint || !hintUnlocked}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-all flex items-center gap-2 ${
+                hintUnlocked
+                  ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30 hover:bg-yellow-600/30'
+                  : 'bg-gray-700/50 text-gray-500 border border-gray-600/30 cursor-not-allowed'
+              } disabled:opacity-50`}
+              title={
+                hintUnlocked
+                  ? 'Request an AI-powered hint based on your code history'
+                  : 'Keep coding - hints unlock when you need them most!'
+              }
+            >
+              {hintUnlocked ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+              )}
+              {isRequestingHint ? 'Getting Hint...' : hintUnlocked ? 'Need a Hint?' : 'Hint Locked'}
+            </button>
+          )}
+        </div>
+
+        {/* Hint panel - shown when there's an active hint */}
+        {intervention?.hint && (
           <HintPanel
             intervention={intervention}
             onAcknowledge={handleAcknowledgeHint}
             onDismiss={handleAcknowledgeHint}
             context={hintContext}
           />
-        </div>
-      ) : (
-        <div className="mt-2 flex justify-end gap-2">
-          {/* Demo Frustration Button */}
-          <button
-            onClick={handleTriggerFrustration}
-            disabled={isTriggeringFrustration}
-            className="w-9 h-9 text-lg font-bold bg-red-600/20 text-red-400 border border-red-600/30 rounded-lg hover:bg-red-600/40 hover:scale-110 disabled:opacity-50 transition-all flex items-center justify-center"
-            title="Demo: Trigger frustration signal (shows AI intervention)"
-          >
-            {isTriggeringFrustration ? '...' : '!'}
-          </button>
-
-          <button
-            onClick={handleRequestHint}
-            disabled={isRequestingHint}
-            className="px-3 py-1.5 text-sm bg-yellow-600/20 text-yellow-400 border border-yellow-600/30 rounded-lg hover:bg-yellow-600/30 disabled:opacity-50 transition-colors flex items-center gap-2"
-            title="Request an AI-powered hint based on your code history"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-              />
-            </svg>
-            {isRequestingHint ? 'Getting Hint...' : 'Need a Hint?'}
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="flex-1 grid lg:grid-cols-2 gap-6 mt-6 min-h-[600px]">
         <div className="flex flex-col min-h-[500px]">
