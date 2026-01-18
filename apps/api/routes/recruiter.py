@@ -501,7 +501,7 @@ async def get_candidate_videos(
     """
     Get all videos for a candidate with their processing status and analysis.
 
-    Returns videos uploaded by recruiters for this candidate,
+    Returns only videos uploaded by the current recruiter for this candidate,
     including processing status and AI analysis when ready.
     """
     # Verify candidate exists
@@ -509,9 +509,10 @@ async def get_candidate_videos(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    # Fetch all videos for this candidate
+    # Fetch only videos uploaded by this recruiter for this candidate
     videos_cursor = Collections.videos().find({
-        "user_id": user_id
+        "user_id": user_id,
+        "uploaded_by": current_user["user_id"],
     }).sort("uploaded_at", -1)
     videos = await videos_cursor.to_list(length=50)
 
@@ -529,3 +530,53 @@ async def get_candidate_videos(
         })
 
     return {"videos": result}
+
+
+@router.delete("/candidates/{candidate_id}/videos/{video_id}", status_code=204)
+async def delete_candidate_video(
+    candidate_id: str,
+    video_id: str,
+    current_user: dict = Depends(require_recruiter),
+):
+    """
+    Delete a video uploaded by the current recruiter for a candidate.
+
+    Only the recruiter who uploaded the video can delete it.
+    """
+    # Find the video
+    video = await Collections.videos().find_one({"_id": video_id})
+
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Verify video belongs to the specified candidate
+    if video.get("user_id") != candidate_id:
+        raise HTTPException(status_code=404, detail="Video not found for this candidate")
+
+    # Only allow deletion if recruiter uploaded this video
+    if video.get("uploaded_by") != current_user["user_id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete videos that you uploaded",
+        )
+
+    # Delete the video file if it exists
+    file_path = video.get("file_path")
+    if file_path and os.path.exists(file_path):
+        os.remove(file_path)
+
+    # Delete from database
+    await Collections.videos().delete_one({"_id": video_id})
+
+    # Update passport if this was the interview video
+    await Collections.passports().update_one(
+        {"user_id": candidate_id, "interview_video_id": video_id},
+        {
+            "$set": {
+                "interview_video_id": None,
+                "interview_highlights": [],
+                "interview_summary": None,
+                "communication_scores": None,
+            }
+        },
+    )
