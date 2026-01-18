@@ -101,11 +101,148 @@ python train_models.py
 
 ## Sponsor Track Integrations
 
-### Amplitude Integration
-- Semantic event tracking (12+ event types)
-- Real-time user property updates
-- Cohort analysis by archetype
-- Self-improving loop: Data → AI Insights → Product Changes
+### Amplitude Integration (Detailed)
+
+SkillPulse implements a comprehensive Amplitude integration demonstrating the **self-improving product loop**: behavioral data → AI insights → product adaptation.
+
+#### Event Schema (12+ Event Types)
+
+| Event Type | Description | Key Properties |
+|------------|-------------|----------------|
+| `code_changed` | User modifies code in editor | `lines_changed`, `chars_added`, `chars_pasted` |
+| `test_cases_ran` | Code executed against tests | `tests_passed`, `tests_total`, `runtime_ms`, `result` |
+| `task_submitted` | Final solution submitted | `passed`, `score`, `tests_passed`, `tests_total` |
+| `error_emitted` | Runtime error occurred | `error_type`, `stack_depth`, `is_repeat` |
+| `fix_applied` | Error fix applied | `time_since_error`, `fix_type` |
+| `contextual_hint_shown` | AI hint displayed | `hint_type`, `trigger_reason` |
+| `hint_acknowledged` | User clicked/dismissed hint | `hint_id`, `time_to_acknowledge` |
+| `chat_help_requested` | User asked chat assistant | `message_length`, `has_code_context`, `has_error_context` |
+| `chat_help_response_received` | Chat response sent | `response_length` |
+| `proctoring_violation` | Integrity violation detected | `violation_type`, `severity` |
+| `paste_burst_detected` | Large paste detected | `chars_pasted` |
+| `tab_switch` | User switched browser tabs | `duration_away_ms` |
+| `editor_command` | Editor shortcut/command used | `command`, `source` (shortcut vs menu) |
+
+#### Data Flow Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           EVENT INGESTION                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Monaco Editor  →  POST /track  →  MongoDB  →  Background Task              │
+│                                      │              │                        │
+│                                      ▼              ▼                        │
+│                              Store event     forward_to_amplitude()          │
+│                              with metadata   (async, non-blocking)           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           AI ANALYSIS TRIGGER                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  For events: run_attempted, error_emitted, code_changed                     │
+│                                      │                                       │
+│                                      ▼                                       │
+│                          trigger_analysis()                                  │
+│                                      │                                       │
+│              ┌───────────────────────┴───────────────────────┐              │
+│              ▼                                               ▼              │
+│     Frustration Detection                          Radar Profile Update      │
+│     (error_streak >= 3 OR                         (incremental score        │
+│      time_stuck >= 180s)                           adjustments)              │
+│              │                                                               │
+│              ▼                                                               │
+│     Backboard AI Intervention                                                │
+│     (multi-model hint generation)                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PASSPORT & USER PROPERTIES                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  On task_submitted:                                                          │
+│                                      │                                       │
+│              ┌───────────────────────┼───────────────────────┐              │
+│              ▼                       ▼                       ▼              │
+│     compute_skill_vector()    assign_archetype()    update_amplitude_       │
+│     [5 dimensions]            (rule-based)          user_properties()        │
+│                                                                              │
+│  Synced to Amplitude:                                                        │
+│    • skill_archetype (fast_iterator, careful_tester, debugger, etc.)        │
+│    • skill_vector [iteration_velocity, debug_efficiency, craftsmanship,     │
+│                    tool_fluency, integrity]                                  │
+│    • integrity_score                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Amplitude Service Functions (`services/amplitude.py`)
+
+| Function | Purpose | Amplitude API |
+|----------|---------|---------------|
+| `forward_to_amplitude()` | Forward events async | `POST /2/httpapi` |
+| `update_amplitude_user_properties()` | Sync user profile | `POST /2/httpapi` ($identify) |
+| `fetch_event_segmentation()` | Query event analytics | `GET /api/2/events/segmentation` |
+| `fetch_user_activity()` | Get user activity summary | `GET /api/2/useractivity` |
+| `fetch_user_event_counts()` | Local MongoDB counts (fast) | N/A (local) |
+| `get_passport_analytics()` | Comprehensive user metrics | Hybrid (local + Amplitude) |
+
+#### The Self-Improving Loop
+
+```
+DATA (Behavioral Events)
+    │
+    ├── code_changed, test_cases_ran, error_emitted, fix_applied
+    ├── contextual_hint_shown, hint_acknowledged
+    ├── chat_help_requested, proctoring_violation
+    │
+    ▼
+INSIGHTS (AI Analysis)
+    │
+    ├── Frustration Detection: pattern analysis on error streaks, time stuck
+    ├── Skill Vector Computation: 5-dimension profile from event aggregation
+    ├── Archetype Assignment: fast_iterator, careful_tester, debugger, craftsman, explorer
+    ├── Error Profile: user's common error patterns for personalized hints
+    │
+    ▼
+ACTION (Product Adaptation)
+    │
+    ├── Contextual Hints: AI-generated, personalized to error history
+    ├── Task Recommendations: based on weak areas in radar profile
+    ├── Recruiter Matching: job fit scoring using skill vectors
+    ├── Passport Updates: real-time Engineering DNA visualization
+```
+
+#### Key Files
+
+| File | Role |
+|------|------|
+| `apps/api/services/amplitude.py` | Core Amplitude service (forwarding, user properties, queries) |
+| `apps/api/routes/track.py` | Event ingestion endpoints (`POST /track`, `POST /track/batch`) |
+| `apps/api/routes/analytics.py` | Analytics query endpoints (passport, metrics breakdown) |
+| `apps/api/services/skillgraph.py` | Skill vector computation, archetype assignment, Amplitude sync |
+| `apps/api/services/ai_worker.py` | AI analysis trigger, frustration detection, radar updates |
+| `apps/api/routes/tasks.py` | Task execution with `test_cases_ran`, `task_submitted` events |
+| `apps/api/routes/chat.py` | Chat help with `chat_help_requested` events |
+
+#### Analytics Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /analytics/passport` | User's comprehensive analytics (event counts, session stats, AI metrics) |
+| `GET /analytics/passport/{user_id}` | Recruiter view of candidate analytics |
+| `GET /analytics/events/counts` | Event count summary for current user |
+| `GET /analytics/metrics/breakdown` | Detailed explanation of how each metric was calculated |
+| `GET /analytics/amplitude/segmentation` | Direct Amplitude Data API queries |
+
+#### Why This Qualifies for the Amplitude Sponsor Track
+
+1. **Behavioral Data & Analytics**: 12+ semantic event types with rich properties, clear event schema, user journey modeling (session → attempts → errors → fixes → success)
+
+2. **AI Application**: Frustration detection via pattern analysis (not just if/else), multi-model AI routing via Backboard, personalized hints based on error history, skill vector computation from behavioral aggregation
+
+3. **Product Impact**: Real-time Engineering DNA radar charts, adaptive AI hints when struggling, recruiter job matching via skill vectors, comprehensive skill passport
+
+4. **Self-Improving Loop**: Events drive AI insights → insights drive personalization → personalization improves experience → more events captured
 
 ### TwelveLabs Integration
 - Interview video indexing with Marengo 3.0
