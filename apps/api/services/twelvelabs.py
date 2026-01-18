@@ -13,6 +13,7 @@ import httpx
 import asyncio
 import os
 import json
+import subprocess
 from datetime import datetime
 from typing import Optional
 from config import get_settings
@@ -475,6 +476,61 @@ async def get_or_create_index() -> Optional[str]:
     return await service.get_or_create_index()
 
 
+def convert_webm_to_mp4(input_path: str, output_path: str) -> bool:
+    """
+    Convert WebM video to MP4 using ffmpeg.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        print(f"[TwelveLabs] Converting WebM to MP4: {input_path} -> {output_path}")
+
+        # Use ffmpeg to convert WebM to MP4
+        # -i: input file
+        # -c:v libx264: use H.264 video codec
+        # -c:a aac: use AAC audio codec
+        # -strict experimental: allow experimental codecs
+        # -movflags +faststart: optimize for web streaming
+        # -y: overwrite output file if it exists
+        cmd = [
+            "ffmpeg",
+            "-i", input_path,
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-strict", "experimental",
+            "-movflags", "+faststart",
+            "-y",
+            output_path
+        ]
+
+        # Run ffmpeg
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        if result.returncode == 0:
+            # Check if output file was created and has size
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                print(f"[TwelveLabs] Conversion successful! Output size: {os.path.getsize(output_path)} bytes")
+                return True
+            else:
+                print(f"[TwelveLabs] Conversion failed: Output file missing or empty")
+                return False
+        else:
+            print(f"[TwelveLabs] Conversion failed with return code {result.returncode}")
+            print(f"[TwelveLabs] ffmpeg stderr: {result.stderr}")
+            return False
+
+    except subprocess.TimeoutExpired:
+        print(f"[TwelveLabs] Conversion timeout after 5 minutes")
+        return False
+    except Exception as e:
+        print(f"[TwelveLabs] Conversion error: {e}")
+        return False
+
+
 async def upload_video_to_twelvelabs(
     video_id: str,
     user_id: str,
@@ -524,12 +580,34 @@ async def upload_video_to_twelvelabs(
         # Get content type from video document
         video_doc = await Collections.videos().find_one({"_id": video_id})
         content_type = video_doc.get("content_type", "video/mp4") if video_doc else "video/mp4"
-        print(f"[TwelveLabs] Using content type: {content_type}")
+        print(f"[TwelveLabs] Original content type: {content_type}")
+
+        # Check if we need to convert WebM to MP4
+        upload_file_path = file_path
+        cleanup_mp4 = False
+
+        if content_type == "video/webm" or file_path.endswith(".webm"):
+            print(f"[TwelveLabs] WebM format detected - converting to MP4 for compatibility")
+            mp4_path = file_path.replace(".webm", ".mp4")
+
+            # Convert WebM to MP4
+            if convert_webm_to_mp4(file_path, mp4_path):
+                upload_file_path = mp4_path
+                content_type = "video/mp4"
+                cleanup_mp4 = True
+                print(f"[TwelveLabs] Using converted MP4 file: {upload_file_path}")
+            else:
+                print(f"[TwelveLabs] ERROR: Failed to convert WebM to MP4")
+                await Collections.videos().update_one(
+                    {"_id": video_id},
+                    {"$set": {"status": "failed", "error": "Failed to convert WebM to MP4"}},
+                )
+                return
 
         async with httpx.AsyncClient() as client:
             # Upload video - read file content into memory first for reliable async operation
-            print(f"[TwelveLabs] Uploading video file: {file_path}")
-            with open(file_path, "rb") as f:
+            print(f"[TwelveLabs] Uploading video file: {upload_file_path}")
+            with open(upload_file_path, "rb") as f:
                 file_content = f.read()
 
             # Debug: Log file size and first bytes to help diagnose issues
@@ -540,7 +618,7 @@ async def upload_video_to_twelvelabs(
             if file_size < 10000:  # Less than 10KB is suspicious
                 print(f"[TwelveLabs] WARNING: File is very small, may not be a valid video")
 
-            files = {"video_file": (os.path.basename(file_path), file_content, content_type)}
+            files = {"video_file": (os.path.basename(upload_file_path), file_content, content_type)}
             data = {"index_id": index_id}
 
             response = await client.post(
@@ -631,9 +709,15 @@ async def upload_video_to_twelvelabs(
                         },
                     )
 
-                    # Clean up temp file
+                    # Clean up temp files
                     if os.path.exists(file_path):
                         os.remove(file_path)
+                        print(f"[TwelveLabs] Cleaned up original file: {file_path}")
+
+                    # Clean up converted MP4 if we created one
+                    if cleanup_mp4 and os.path.exists(upload_file_path):
+                        os.remove(upload_file_path)
+                        print(f"[TwelveLabs] Cleaned up converted MP4: {upload_file_path}")
 
                     print(f"[TwelveLabs] Video {video_id} processing complete!")
                     return
@@ -644,6 +728,9 @@ async def upload_video_to_twelvelabs(
                         {"_id": video_id},
                         {"$set": {"status": "failed", "error": status.get("error")}},
                     )
+                    # Clean up files on failure
+                    if cleanup_mp4 and os.path.exists(upload_file_path):
+                        os.remove(upload_file_path)
                     return
 
             # Timeout
@@ -652,6 +739,9 @@ async def upload_video_to_twelvelabs(
                 {"_id": video_id},
                 {"$set": {"status": "failed", "error": "Indexing timeout"}},
             )
+            # Clean up files on timeout
+            if cleanup_mp4 and os.path.exists(upload_file_path):
+                os.remove(upload_file_path)
 
     except Exception as e:
         print(f"[TwelveLabs] ERROR: {e}")
@@ -659,6 +749,9 @@ async def upload_video_to_twelvelabs(
             {"_id": video_id},
             {"$set": {"status": "failed", "error": str(e)}},
         )
+        # Clean up files on exception
+        if 'cleanup_mp4' in locals() and cleanup_mp4 and 'upload_file_path' in locals() and os.path.exists(upload_file_path):
+            os.remove(upload_file_path)
 
 
 async def search_video(twelvelabs_video_id: str, query: str) -> list[dict]:
