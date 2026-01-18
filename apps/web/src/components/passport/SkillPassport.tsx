@@ -202,8 +202,7 @@ export function SkillPassport({ passport, compact = false, showAnalytics = false
               return (
                 <div
                   key={key}
-                  className="text-center p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-help"
-                  title={info.description}
+                  className="relative text-center p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-help group"
                 >
                   <div className="text-2xl font-bold text-primary-600">
                     {((value || 0) * 100).toFixed(0)}%
@@ -211,6 +210,15 @@ export function SkillPassport({ passport, compact = false, showAnalytics = false
                   <div className="text-xs text-gray-500">
                     {info.label}
                   </div>
+                  {/* Tooltip */}
+                  {info.description && (
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48">
+                      <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg py-2 px-3 shadow-lg">
+                        {info.description}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full border-t-gray-900 dark:border-t-gray-700 border-t-8 border-x-8 border-x-transparent"></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

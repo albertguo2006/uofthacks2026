@@ -34,16 +34,6 @@ export default function RecruiterDashboard() {
         </Link>
 
         <Link
-          href="/recruiter/candidates?archetype=careful_tester"
-          className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
-        >
-          <h3 className="text-lg font-semibold">By Archetype</h3>
-          <p className="text-gray-600 dark:text-gray-300 mt-2">
-            Filter candidates by behavioral archetype (Fast Iterators, Careful Testers, etc.)
-          </p>
-        </Link>
-
-        <Link
           href="/recruiter/security"
           className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
         >
