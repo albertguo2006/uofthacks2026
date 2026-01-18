@@ -168,6 +168,43 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
+  async postForm<T>(endpoint: string, formData: FormData): Promise<T> {
+    const token = this.getToken();
+    const devMode = isDevMode();
+
+    const headers: HeadersInit = {};
+
+    if (devMode) {
+      (headers as Record<string, string>)['X-Dev-Mode'] = 'true';
+      (headers as Record<string, string>)['X-Dev-Role'] = getDevRole();
+    } else if (token) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMessage = 'Request failed';
+      try {
+        const error = await response.json();
+        if (typeof error.detail === 'string') {
+          errorMessage = error.detail;
+        } else if (typeof error.message === 'string') {
+          errorMessage = error.message;
+        }
+      } catch {
+        errorMessage = `Request failed with status ${response.status}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    return response.json();
+  }
+
   async uploadVideo(
     formData: FormData,
     onProgress?: (progress: number) => void
