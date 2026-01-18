@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SkillPassport } from '@/components/passport/SkillPassport';
 import { RecruiterVideoUploader } from '@/components/video/RecruiterVideoUploader';
+import { InterviewRequestModal } from '@/components/recruiter/InterviewRequestModal';
 import { usePassport } from '@/hooks/usePassport';
 import { api } from '@/lib/api';
 import type { SessionSummary, RecruiterVideo } from '@/types/timeline';
@@ -32,6 +33,9 @@ export default function CandidateDetailPage() {
   // Delete confirmation state
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Interview request modal state
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
 
   const handleDeleteVideo = async (videoId: string) => {
     setDeletingVideoId(videoId);
@@ -141,7 +145,10 @@ export default function CandidateDetailPage() {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">{passport.display_name}</h1>
-        <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+        <button
+          onClick={() => setShowInterviewModal(true)}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+        >
           Invite to Interview
         </button>
       </div>
@@ -446,6 +453,14 @@ export default function CandidateDetailPage() {
           />
         </div>
       </div>
+
+      {/* Interview Request Modal */}
+      <InterviewRequestModal
+        isOpen={showInterviewModal}
+        onClose={() => setShowInterviewModal(false)}
+        candidateId={candidateId}
+        candidateName={passport.display_name}
+      />
     </div>
   );
 }
