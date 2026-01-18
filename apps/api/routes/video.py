@@ -7,7 +7,7 @@ import os
 from middleware.auth import get_current_user
 from db.collections import Collections
 from models.video import VideoUpload, VideoStatus, VideoDetails, SearchResult, VideoHighlight, InterviewHighlight, CommunicationAnalysis, CommunicationScore
-from services.twelvelabs import upload_video_to_twelvelabs, search_video
+from services.twelvelabs import upload_video_to_twelvelabs, search_video, get_video_streaming_info
 
 router = APIRouter()
 
@@ -156,14 +156,28 @@ async def get_video_details(
             technical_depth=CommunicationScore(**ca["technical_depth"]) if ca.get("technical_depth") else None,
         )
 
+    # Fetch streaming URLs from TwelveLabs if video is ready
+    stream_url = None
+    thumbnail_url = None
+    duration_seconds = video.get("duration_seconds")
+
+    if video["status"] == "ready" and video.get("twelvelabs_video_id"):
+        streaming_info = await get_video_streaming_info(video["twelvelabs_video_id"])
+        stream_url = streaming_info.get("stream_url")
+        thumbnail_url = streaming_info.get("thumbnail_url")
+        if streaming_info.get("duration"):
+            duration_seconds = streaming_info["duration"]
+
     return VideoDetails(
         video_id=video_id,
         status=video["status"],
-        duration_seconds=video.get("duration_seconds"),
+        duration_seconds=duration_seconds,
         ready_at=video.get("ready_at"),
         summary=video.get("summary"),
         highlights=highlights,
         communication_analysis=communication_analysis,
+        stream_url=stream_url,
+        thumbnail_url=thumbnail_url,
     )
 
 

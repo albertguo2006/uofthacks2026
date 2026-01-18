@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, VideoDetails } from '@/lib/api';
+import HLSVideoPlayer from '@/components/HLSVideoPlayer';
 
 type SearchResult = {
   start_time: number;
@@ -20,12 +21,24 @@ export default function VideoDetailPage() {
   const [video, setVideo] = useState<VideoDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Seek video to specific time
+  const seekToTime = (seconds: number) => {
+    // Find video element and seek
+    const videoElement = document.querySelector('video');
+    if (videoElement) {
+      videoElement.currentTime = seconds;
+      videoElement.play().catch(() => {});
+    }
+  };
 
   useEffect(() => {
     async function fetchVideo() {
@@ -74,7 +87,7 @@ export default function VideoDetailPage() {
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     if (mins > 0) {
       return `${mins}m ${secs}s`;
     }
@@ -161,16 +174,24 @@ export default function VideoDetailPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Video Placeholder */}
-          <div className="bg-slate-900 rounded-lg aspect-video flex items-center justify-center">
-            <div className="text-center text-gray-400">
-              <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <p className="text-sm">Video playback coming soon</p>
-              <p className="text-xs mt-1 opacity-75">AI analysis available below</p>
+          {/* Video Player */}
+          {video.stream_url ? (
+            <HLSVideoPlayer
+              src={video.stream_url}
+              poster={video.thumbnail_url}
+              className="w-full"
+            />
+          ) : (
+            <div className="bg-slate-900 rounded-lg aspect-video flex items-center justify-center">
+              <div className="text-center text-gray-400">
+                <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <p className="text-sm">Video stream unavailable</p>
+                <p className="text-xs mt-1 opacity-75">Video may still be processing</p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* No Analysis Available Message */}
           {!hasAnalysis && (
@@ -369,10 +390,11 @@ export default function VideoDetailPage() {
                 {searchResults.map((result, index) => (
                   <div
                     key={index}
-                    className="p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+                    onClick={() => seekToTime(result.start_time)}
+                    className="p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors group"
                   >
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm font-mono text-primary-600 dark:text-primary-400">
+                      <span className="text-sm font-mono text-primary-600 dark:text-primary-400 group-hover:underline">
                         {formatTimestamp(result.start_time)} - {formatTimestamp(result.end_time)}
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -409,13 +431,14 @@ export default function VideoDetailPage() {
                 {video.highlights.map((highlight, idx) => (
                   <div
                     key={idx}
-                    className="p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+                    onClick={() => seekToTime(highlight.start)}
+                    className="p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors group"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`px-2 py-0.5 text-xs font-medium rounded uppercase ${getCategoryColor(highlight.category)}`}>
                         {highlight.category}
                       </span>
-                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
+                      <span className="text-xs font-mono text-gray-500 dark:text-gray-400 group-hover:underline">
                         {formatTimestamp(highlight.start)} - {formatTimestamp(highlight.end)}
                       </span>
                     </div>

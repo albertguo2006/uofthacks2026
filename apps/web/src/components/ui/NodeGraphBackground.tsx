@@ -332,11 +332,11 @@ export default function NodeGraphBackground({
         className="fixed inset-0 pointer-events-none"
         style={{ zIndex: 0 }}
       />
-      {/* Cursor canvas - above everything */}
+      {/* Cursor canvas - behind UI elements */}
       <canvas
         ref={cursorCanvasRef}
         className="fixed inset-0 pointer-events-none"
-        style={{ zIndex: 9999 }}
+        style={{ zIndex: 1 }}
       />
     </>
   );

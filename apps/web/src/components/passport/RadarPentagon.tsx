@@ -15,14 +15,15 @@ interface RadarPoint {
   shortLabel: string;
   key: keyof RadarProfile;
   value: number;
+  description: string;
 }
 
-const RADAR_DIMENSIONS: { label: string; shortLabel: string; key: keyof RadarProfile }[] = [
-  { label: 'Verification', shortLabel: 'Verification', key: 'verification' },
-  { label: 'Velocity', shortLabel: 'Velocity', key: 'velocity' },
-  { label: 'Optimization', shortLabel: 'Optimization', key: 'optimization' },
-  { label: 'Decomposition', shortLabel: 'Decomposition', key: 'decomposition' },
-  { label: 'Debugging', shortLabel: 'Debugging', key: 'debugging' },
+const RADAR_DIMENSIONS: { label: string; shortLabel: string; key: keyof RadarProfile; description: string }[] = [
+  { label: 'Verification', shortLabel: 'Verification', key: 'verification', description: 'Thoroughness in testing and validating code correctness' },
+  { label: 'Velocity', shortLabel: 'Velocity', key: 'velocity', description: 'Speed of iterating and implementing solutions' },
+  { label: 'Optimization', shortLabel: 'Optimization', key: 'optimization', description: 'Ability to improve code performance and efficiency' },
+  { label: 'Decomposition', shortLabel: 'Decomposition', key: 'decomposition', description: 'Breaking complex problems into smaller, manageable parts' },
+  { label: 'Debugging', shortLabel: 'Debugging', key: 'debugging', description: 'Skill in identifying and fixing code issues' },
 ];
 
 const DEFAULT_PROFILE: RadarProfile = {
@@ -186,7 +187,7 @@ export function RadarPentagon({
 
       {/* Labels */}
       {showLabels && (
-        <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute inset-0">
           {labelPositions.map(({ x, y, point }) => {
             // Adjust text positioning based on angle
             const relX = x - centerX;
@@ -213,10 +214,13 @@ export function RadarPentagon({
               translateX = '0%';
             }
 
+            // Determine tooltip position based on label position
+            const tooltipAbove = relY > 0;
+
             return (
               <div
                 key={point.key}
-                className="absolute text-center"
+                className="absolute text-center group cursor-help"
                 style={{
                   left: x,
                   top: y,
@@ -229,6 +233,13 @@ export function RadarPentagon({
                 <span className="block text-sm font-bold text-primary-600 dark:text-primary-400">
                   {Math.round(point.value * 100)}%
                 </span>
+                {/* Tooltip */}
+                <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipAbove ? 'bottom-full mb-2' : 'top-full mt-2'} hidden group-hover:block z-50 w-48`}>
+                  <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg py-2 px-3 shadow-lg">
+                    {point.description}
+                    <div className={`absolute left-1/2 -translate-x-1/2 ${tooltipAbove ? 'top-full border-t-gray-900 dark:border-t-gray-700 border-t-8 border-x-8 border-x-transparent' : 'bottom-full border-b-gray-900 dark:border-b-gray-700 border-b-8 border-x-8 border-x-transparent'}`}></div>
+                  </div>
+                </div>
               </div>
             );
           })}

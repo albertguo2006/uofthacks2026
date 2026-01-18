@@ -52,11 +52,14 @@ class VideoDetails(BaseModel):
     """Full video details including TwelveLabs analysis results."""
     video_id: str
     status: str
-    duration_seconds: Optional[int] = None
+    duration_seconds: Optional[float] = None
     ready_at: Optional[datetime] = None
     summary: Optional[str] = None
     highlights: Optional[list[InterviewHighlight]] = None
     communication_analysis: Optional[CommunicationAnalysis] = None
+    # Streaming URLs from TwelveLabs
+    stream_url: Optional[str] = None  # HLS playlist URL
+    thumbnail_url: Optional[str] = None  # Video thumbnail
 
 
 class VideoInDB(BaseModel):

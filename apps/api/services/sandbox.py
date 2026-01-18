@@ -31,6 +31,12 @@ async def execute_code(
 
             elapsed_ms = int((time.time() - start_time) * 1000)
 
+            if response.status_code == 404:
+                # Sandbox endpoint not found - use fallback execution
+                return await execute_code_fallback(
+                    code, language, test_input, expected_output, timeout_seconds
+                )
+
             if response.status_code != 200:
                 return {
                     "passed": False,

@@ -188,15 +188,20 @@ class TwelveLabsService:
             return []
 
         try:
-            result = await self._request(
-                "POST",
-                "/search",
-                json={
-                    "index_id": index_id,
-                    "query_text": query,
-                    "search_options": ["visual", "audio"],
-                },
-            )
+            # v1.3 API requires multipart/form-data format with separate search_options
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{TWELVELABS_API_URL}/search",
+                    headers={"x-api-key": self.api_key},
+                    files=[
+                        ("index_id", (None, index_id)),
+                        ("query_text", (None, query)),
+                        ("search_options", (None, "visual")),
+                        ("search_options", (None, "audio")),
+                    ],
+                )
+                response.raise_for_status()
+                result = response.json()
 
             # Filter results by video_id (v1.3 API doesn't support video-level filtering)
             clips = result.get("data", [])
@@ -209,9 +214,10 @@ class TwelveLabsService:
                 {
                     "start_time": clip.get("start"),
                     "end_time": clip.get("end"),
-                    "confidence": clip.get("confidence") or clip.get("score") or clip.get("rank"),
+                    # v1.3 returns "score" (0-100) and "confidence" (high/medium/low)
+                    "confidence": clip.get("score", 50) / 100.0,
                     "thumbnail_url": clip.get("thumbnail_url"),
-                    "transcript": clip.get("metadata", {}).get("transcript", ""),
+                    "transcript": clip.get("transcription", ""),
                 }
                 for clip in filtered_clips
             ]
@@ -221,44 +227,76 @@ class TwelveLabsService:
 
     async def generate_interview_summary(self, video_id: str) -> str:
         """
-        Generate a comprehensive summary of the interview using Pegasus.
+        Generate a comprehensive summary of the interview using GPT-4o.
+
+        Extracts transcript snippets via TwelveLabs search, then uses
+        GPT-4o to generate a detailed recruiter-focused summary.
         """
         try:
-            result = await self._request(
-                "POST",
-                "/summarize",
-                json={
-                    "video_id": video_id,
-                    "type": "summary",
-                    "prompt": """Summarize this coding interview session. Include:
-1. The candidate's problem-solving approach
-2. How they handled debugging and errors
-3. Their communication clarity when explaining decisions
-4. Key technical decisions they made
-5. Overall impression of their engineering style""",
-                },
+            # Search for key interview moments to build context
+            key_queries = [
+                "explaining approach",
+                "discussing solution",
+                "problem solving",
+                "technical explanation",
+                "asking questions",
+                "debugging",
+            ]
+
+            all_transcripts = []
+            for query in key_queries:
+                moments = await self.search_interview_moments(video_id, query)
+                for moment in moments[:2]:  # Top 2 per query
+                    if moment.get("transcript"):
+                        all_transcripts.append(moment["transcript"])
+
+            if not all_transcripts:
+                return "Interview video indexed successfully. Key moments can be searched using the search feature."
+
+            # Use GPT-4o to generate a detailed summary
+            from services.backboard import BackboardService
+            backboard = BackboardService(user_id="system")
+
+            transcript_text = "\n\n---\n\n".join(all_transcripts[:12])
+
+            system_prompt = """You are an expert technical recruiter analyzing a coding interview video.
+Write a detailed summary for hiring managers. Be specific and actionable.
+Focus on what makes this candidate unique. Use 3-4 paragraphs."""
+
+            user_message = f"""Based on these transcript excerpts from a technical interview, write a comprehensive summary for recruiters.
+
+Interview Transcript Excerpts:
+{transcript_text}
+
+Include in your summary:
+1. **Problem-Solving Approach**: How did the candidate approach the problem? Did they break it down, ask clarifying questions, or dive straight in?
+2. **Technical Competence**: What technical skills or knowledge did they demonstrate? Were their explanations accurate?
+3. **Communication Style**: How well did they articulate their thought process? Did they think out loud?
+4. **Areas of Strength**: What stood out positively?
+5. **Potential Concerns**: Any red flags or areas that need follow-up in future interviews?
+
+Write in a professional tone suitable for sharing with a hiring team."""
+
+            response = await backboard._call_model(
+                assistant_name="InterviewSummaryAssistant",
+                system_prompt=system_prompt,
+                user_message=user_message,
+                llm_provider="openai",
+                model_name="gpt-4o",
+                thread_key="interview_summary",
             )
-            return result.get("summary", "")
+
+            return response
+
         except Exception as e:
             print(f"TwelveLabs summary error: {e}")
             return ""
 
     async def generate_highlights(self, video_id: str) -> str:
         """Generate bullet-point highlights for quick recruiter review."""
-        try:
-            result = await self._request(
-                "POST",
-                "/generate",
-                json={
-                    "video_id": video_id,
-                    "type": "highlight",
-                    "prompt": "Extract the top 5 most impressive or notable moments from this coding interview.",
-                },
-            )
-            return result.get("data", "")
-        except Exception as e:
-            print(f"TwelveLabs highlights error: {e}")
-            return ""
+        # TwelveLabs v1.3 removed the /generate endpoint
+        # Highlights are now extracted via search in extract_highlight_clips
+        return ""
 
     async def extract_highlight_clips(self, video_id: str) -> list:
         """
@@ -296,34 +334,139 @@ class TwelveLabsService:
 
     async def analyze_communication_style(self, video_id: str) -> dict:
         """
-        Analyze candidate's communication patterns using Pegasus.
+        Analyze candidate's communication patterns using Gemini AI.
+
+        Uses TwelveLabs search to extract transcript snippets,
+        then sends to Gemini for detailed communication analysis.
         """
         try:
-            result = await self._request(
-                "POST",
-                "/generate",
-                json={
-                    "video_id": video_id,
-                    "type": "text",
-                    "prompt": """Analyze the candidate's communication style in this coding interview.
-Rate each aspect from 1-5 and provide a brief justification:
-- Clarity: How clearly do they explain technical concepts?
-- Confidence: How confident do they sound when presenting solutions?
-- Collaboration: Do they think out loud and invite feedback?
-- Technical depth: Do they use appropriate technical terminology?
-Return as JSON: {"clarity": {"score": X, "reason": "..."}, ...}""",
-                },
+            # First, gather transcript snippets from various communication moments
+            search_queries = [
+                "explaining approach",
+                "discussing solution",
+                "asking questions",
+                "technical explanation",
+            ]
+
+            all_transcripts = []
+            for query in search_queries:
+                moments = await self.search_interview_moments(video_id, query)
+                for moment in moments[:3]:  # Top 3 per query
+                    if moment.get("transcript"):
+                        all_transcripts.append(moment["transcript"])
+
+            if not all_transcripts:
+                print("[TwelveLabs] No transcripts found for communication analysis")
+                return {
+                    "clarity": {"score": 3, "reason": "No transcript data available for analysis."},
+                    "confidence": {"score": 3, "reason": "No transcript data available for analysis."},
+                    "collaboration": {"score": 3, "reason": "No transcript data available for analysis."},
+                    "technical_depth": {"score": 3, "reason": "No transcript data available for analysis."},
+                }
+
+            # Use Gemini (or fallback to GPT-4o) to analyze the transcripts
+            from services.backboard import BackboardService
+            backboard = BackboardService(user_id="system")
+
+            transcript_text = "\n\n".join(all_transcripts[:10])  # Limit to avoid token overflow
+
+            system_prompt = """You analyze interview communication skills. Return only valid JSON.
+The JSON must have 4 keys: clarity, confidence, collaboration, technical_depth.
+Each key has score (1-5) and reason (under 15 words).
+Example format: the word clarity in quotes, colon, open brace, the word score in quotes, colon, number, etc.
+No markdown code blocks."""
+
+            user_message = f"""Analyze these interview transcript snippets and rate communication skills 1-5:
+
+{transcript_text[:2000]}"""
+
+            # Use GPT-4o via Backboard for reliable analysis
+            # (Gemini free tier has strict rate limits)
+            response = await backboard._call_model(
+                assistant_name="CommunicationAnalysisAssistant",
+                system_prompt=system_prompt,
+                user_message=user_message,
+                llm_provider="openai",
+                model_name="gpt-4o",
+                thread_key="communication_analysis",
             )
+
+            # Parse the response
             try:
-                return json.loads(result.get("data", "{}"))
-            except json.JSONDecodeError:
-                return {}
+                # Strip markdown code blocks if present
+                clean_response = response.strip()
+                if clean_response.startswith("```"):
+                    clean_response = clean_response.split("\n", 1)[1] if "\n" in clean_response else clean_response[3:]
+                if clean_response.endswith("```"):
+                    clean_response = clean_response[:-3]
+                clean_response = clean_response.strip()
+
+                analysis = json.loads(clean_response)
+                print(f"[TwelveLabs] Gemini communication analysis complete: {analysis}")
+                return analysis
+            except json.JSONDecodeError as e:
+                print(f"[TwelveLabs] Failed to parse Gemini response: {e}")
+                print(f"[TwelveLabs] Raw response: {response}")
+                return {
+                    "clarity": {"score": 3, "reason": "Analysis parsing failed."},
+                    "confidence": {"score": 3, "reason": "Analysis parsing failed."},
+                    "collaboration": {"score": 3, "reason": "Analysis parsing failed."},
+                    "technical_depth": {"score": 3, "reason": "Analysis parsing failed."},
+                }
+
         except Exception as e:
             print(f"TwelveLabs communication analysis error: {e}")
             return {}
 
 
+    async def get_video_streaming_info(self, twelvelabs_video_id: str) -> dict:
+        """
+        Get streaming URLs and metadata from TwelveLabs for a video.
+
+        Returns dict with stream_url, thumbnail_url, and duration.
+        """
+        index_id = await self.get_or_create_index()
+        if not index_id or not self.api_key:
+            return {}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{TWELVELABS_API_URL}/indexes/{index_id}/videos/{twelvelabs_video_id}",
+                    headers={"x-api-key": self.api_key},
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                result = {}
+
+                # Extract HLS streaming info
+                hls = data.get("hls", {})
+                if hls.get("video_url"):
+                    result["stream_url"] = hls["video_url"]
+                if hls.get("thumbnail_urls") and len(hls["thumbnail_urls"]) > 0:
+                    result["thumbnail_url"] = hls["thumbnail_urls"][0]
+
+                # Extract duration from system metadata
+                system_metadata = data.get("system_metadata", {})
+                if system_metadata.get("duration"):
+                    result["duration"] = system_metadata["duration"]
+
+                print(f"[TwelveLabs] Got streaming info for {twelvelabs_video_id}: {list(result.keys())}")
+                return result
+
+        except Exception as e:
+            print(f"[TwelveLabs] Error getting streaming info: {e}")
+            return {}
+
+
 # Standalone functions for background tasks (backward compatibility)
+
+
+async def get_video_streaming_info(twelvelabs_video_id: str) -> dict:
+    """Get streaming URLs for a video from TwelveLabs."""
+    service = TwelveLabsService()
+    return await service.get_video_streaming_info(twelvelabs_video_id)
 
 
 async def get_or_create_index() -> Optional[str]:

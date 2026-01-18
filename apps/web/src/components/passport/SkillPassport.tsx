@@ -45,6 +45,41 @@ function getViolationSummary(violations: number): string {
   }
 }
 
+const METRIC_INFO: Record<string, { label: string; description: string }> = {
+  debug_efficiency: {
+    label: 'Debug Efficiency',
+    description: 'Skill in identifying and resolving code errors quickly',
+  },
+  iteration_velocity: {
+    label: 'Iteration Velocity',
+    description: 'Speed of making incremental improvements and testing changes',
+  },
+  craftsmanship: {
+    label: 'Craftsmanship',
+    description: 'Attention to code quality, readability, and best practices',
+  },
+  tool_fluency: {
+    label: 'Tool Fluency',
+    description: 'Proficiency with development tools and IDE features',
+  },
+  integrity: {
+    label: 'Integrity',
+    description: 'Consistency and honesty in coding behavior',
+  },
+};
+
+function getMetricInfo(key: string): { label: string; description: string } {
+  if (METRIC_INFO[key]) {
+    return METRIC_INFO[key];
+  }
+  // Fallback: capitalize first letter of each word
+  const label = key
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+  return { label, description: '' };
+}
+
 function IntegrityScoreDisplay({ metrics }: { metrics: IntegrityMetrics }) {
   const rating = getIntegrityRating(metrics.integrity_score);
   const summary = getViolationSummary(metrics.violations);
@@ -162,16 +197,31 @@ export function SkillPassport({ passport, compact = false, showAnalytics = false
         <div>
           <h3 className="font-semibold mb-3">Detailed Metrics</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {Object.entries(passport.metrics).map(([key, value]) => (
-              <div key={key} className="text-center p-3 bg-gray-50 dark:bg-slate-700 rounded-lg">
-                <div className="text-2xl font-bold text-primary-600">
-                  {((value || 0) * 100).toFixed(0)}%
+            {Object.entries(passport.metrics).map(([key, value]) => {
+              const info = getMetricInfo(key);
+              return (
+                <div
+                  key={key}
+                  className="relative text-center p-3 bg-gray-50 dark:bg-slate-700 rounded-lg cursor-help group"
+                >
+                  <div className="text-2xl font-bold text-primary-600">
+                    {((value || 0) * 100).toFixed(0)}%
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {info.label}
+                  </div>
+                  {/* Tooltip */}
+                  {info.description && (
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48">
+                      <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg py-2 px-3 shadow-lg">
+                        {info.description}
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full border-t-gray-900 dark:border-t-gray-700 border-t-8 border-x-8 border-x-transparent"></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="text-xs text-gray-500 capitalize">
-                  {key.replace('_', ' ')}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
