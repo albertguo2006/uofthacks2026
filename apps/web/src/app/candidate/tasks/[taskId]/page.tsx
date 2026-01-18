@@ -162,14 +162,26 @@ export default function SandboxPage() {
     language: selectedLanguage,
   });
 
-  // Cleanup save timeout on unmount
+  // Store proctoring in ref to access in cleanup without causing re-renders
+  const proctoringRef = useRef(proctoring);
+  useEffect(() => {
+    proctoringRef.current = proctoring;
+  }, [proctoring]);
+
+  // Cleanup on unmount - save code and end proctoring session
   useEffect(() => {
     return () => {
+      // Clear save timeout
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
+
+      // End proctoring session if active when leaving page
+      if (proctoringRef.current.isActive) {
+        proctoringRef.current.endSession();
+      }
     };
-  }, []);
+  }, []); // Empty dependency array - only run on unmount
 
   useEffect(() => {
     // Track session start
@@ -229,7 +241,14 @@ export default function SandboxPage() {
   };
 
   const handleSubmit = async () => {
-    await submit(code);
+    const result = await submit(code);
+
+    // End proctoring session after successful submission
+    if (result && proctoring.isActive) {
+      await proctoring.endSession();
+    }
+
+    return result;
   };
 
   const handleAcknowledgeHint = useCallback(() => {

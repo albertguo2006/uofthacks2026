@@ -300,9 +300,18 @@ export default function CandidateDetailPage() {
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded">
-                                  Interview Video
+                                <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                                  video.is_proctored
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
+                                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                }`}>
+                                  {video.is_proctored ? 'Proctored Video' : 'Interview Video'}
                                 </span>
+                                {video.is_proctored && video.task_id && (
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    Task: {video.task_id}
+                                  </span>
+                                )}
                                 {isProcessing && (
                                   <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded flex items-center gap-1">
                                     <div className="animate-spin rounded-full h-3 w-3 border-b border-yellow-600"></div>
@@ -341,8 +350,8 @@ export default function CandidateDetailPage() {
                                   View Analysis
                                 </Link>
                               )}
-                              {/* Delete Button */}
-                              {deleteConfirmId === video.video_id ? (
+                              {/* Delete Button - only for recruiter-uploaded videos */}
+                              {!video.is_proctored && deleteConfirmId === video.video_id ? (
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={() => handleDeleteVideo(video.video_id)}
@@ -358,7 +367,7 @@ export default function CandidateDetailPage() {
                                     Cancel
                                   </button>
                                 </div>
-                              ) : (
+                              ) : !video.is_proctored ? (
                                 <button
                                   onClick={() => setDeleteConfirmId(video.video_id)}
                                   className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
@@ -368,7 +377,7 @@ export default function CandidateDetailPage() {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                   </svg>
                                 </button>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                         </div>

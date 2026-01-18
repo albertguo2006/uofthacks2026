@@ -510,10 +510,15 @@ async def get_candidate_videos(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    # Fetch only videos uploaded by this recruiter for this candidate
+    # Fetch videos for this candidate:
+    # 1. Videos uploaded by this recruiter
+    # 2. Proctored videos (uploaded by the candidate during proctored sessions)
     videos_cursor = Collections.videos().find({
         "user_id": user_id,
-        "uploaded_by": current_user["user_id"],
+        "$or": [
+            {"uploaded_by": current_user["user_id"]},  # Recruiter-uploaded videos
+            {"is_proctored": True}  # Proctored session videos
+        ]
     }).sort("uploaded_at", -1)
     videos = await videos_cursor.to_list(length=50)
 
@@ -525,6 +530,9 @@ async def get_candidate_videos(
             "filename": video.get("filename"),
             "uploaded_at": video.get("uploaded_at"),
             "uploaded_by": video.get("uploaded_by"),
+            "is_proctored": video.get("is_proctored", False),
+            "task_id": video.get("task_id"),
+            "session_id": video.get("session_id"),
             "summary": video.get("summary"),
             "highlights": video.get("highlights"),
             "communication_analysis": video.get("communication_analysis"),

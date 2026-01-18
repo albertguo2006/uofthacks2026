@@ -127,6 +127,9 @@ export interface RecruiterVideo {
   filename: string;
   uploaded_at: string;
   uploaded_by: string;
+  is_proctored?: boolean;
+  task_id?: string;
+  session_id?: string;
   summary?: string;
   highlights?: RecruiterVideoHighlight[];
   communication_analysis?: RecruiterVideoCommunicationAnalysis;
