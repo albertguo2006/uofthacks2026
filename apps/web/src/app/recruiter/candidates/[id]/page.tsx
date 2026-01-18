@@ -116,6 +116,8 @@ export default function CandidateDetailPage() {
 
   const isLoaded = !loadingSessions && !loadingVideos;
   const proctoredSessionCount = sessions.filter(s => s.is_proctored).length;
+  const proctoredVideoCount = videos.filter(v => v.is_proctored).length;
+  const totalProctoredCount = proctoredSessionCount + proctoredVideoCount;
 
   if (isLoading) {
     return (
@@ -162,7 +164,7 @@ export default function CandidateDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Coding Sessions & Interview Videos</h3>
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                {proctoredSessionCount} proctored session{proctoredSessionCount !== 1 ? 's' : ''}, {videos.length} video{videos.length !== 1 ? 's' : ''}
+                {totalProctoredCount} proctored session{totalProctoredCount !== 1 ? 's' : ''}, {videos.length} video{videos.length !== 1 ? 's' : ''}
               </span>
             </div>
 
