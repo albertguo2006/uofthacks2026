@@ -124,7 +124,7 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: H
         ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}
       `}
     >
-      <div className={`border-l-4 rounded-r-lg p-4 ${colorClass}`}>
+      <div className={`border-l-4 rounded-r-lg p-4 min-h-fit ${colorClass}`}>
         {/* Personalization Badge */}
         {intervention.personalization_badge && (
           <div className="mb-2 flex items-center gap-1.5">
@@ -180,9 +180,9 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: H
         {/* Content */}
         {isExpanded && (
           <>
-            <p className="text-sm text-gray-300 leading-relaxed">
+            <div className="text-sm text-gray-300 leading-6 break-words whitespace-normal max-w-full overflow-visible">
               {intervention.hint}
-            </p>
+            </div>
 
             {/* Context info (if available) */}
             {context && (context.attempts || context.code_history_length) && (
