@@ -11,6 +11,7 @@ import { TaskHelpChat } from '@/components/sandbox/TaskHelpChat';
 import { LanguageSelector } from '@/components/sandbox/LanguageSelector';
 import { ProctoringModal } from '@/components/proctoring/ProctoringModal';
 import { ProctoringIndicator } from '@/components/proctoring/ProctoringIndicator';
+import { VideoRecorder } from '@/components/proctoring/VideoRecorder';
 import { useCodeExecution } from '@/hooks/useCodeExecution';
 import { useTasks } from '@/hooks/useTasks';
 import { useProctoring } from '@/hooks/useProctoring';
@@ -333,6 +334,15 @@ export default function SandboxPage() {
         <div className="fixed top-4 right-4 z-50 px-4 py-3 bg-red-100 dark:bg-red-900/50 border border-red-300 dark:border-red-700 text-red-800 dark:text-red-200 rounded-lg shadow-lg animate-pulse">
           {violationToast}
         </div>
+      )}
+
+      {/* Video Recorder for Proctored Sessions */}
+      {proctoring.isActive && proctoring.cameraEnabled && proctoringSessionId && (
+        <VideoRecorder
+          sessionId={proctoringSessionId}
+          taskId={taskId}
+          isActive={proctoring.isActive}
+        />
       )}
 
       <TaskHeader task={task} />
