@@ -179,6 +179,9 @@ class TwelveLabsService:
         """
         Semantic search within interview video.
         Example queries: "explaining their approach", "debugging", "discussing tradeoffs"
+
+        Note: TwelveLabs v1.3 searches at index level, not video level.
+        We filter results client-side by video_id.
         """
         index_id = await self.get_or_create_index()
         if not index_id:
@@ -190,21 +193,27 @@ class TwelveLabsService:
                 "/search",
                 json={
                     "index_id": index_id,
-                    "query": query,
-                    "search_options": ["visual", "conversation", "text_in_video"],
-                    "filter": {"id": [video_id]},
-                    "threshold": "medium",
+                    "query_text": query,
+                    "search_options": ["visual", "audio"],
                 },
             )
+
+            # Filter results by video_id (v1.3 API doesn't support video-level filtering)
+            clips = result.get("data", [])
+            filtered_clips = [
+                clip for clip in clips
+                if clip.get("video_id") == video_id
+            ]
+
             return [
                 {
-                    "start": clip.get("start"),
-                    "end": clip.get("end"),
-                    "confidence": clip.get("confidence"),
+                    "start_time": clip.get("start"),
+                    "end_time": clip.get("end"),
+                    "confidence": clip.get("confidence") or clip.get("score") or clip.get("rank"),
                     "thumbnail_url": clip.get("thumbnail_url"),
                     "transcript": clip.get("metadata", {}).get("transcript", ""),
                 }
-                for clip in result.get("data", [])
+                for clip in filtered_clips
             ]
         except Exception as e:
             print(f"TwelveLabs search error: {e}")
@@ -273,8 +282,8 @@ class TwelveLabsService:
                     highlights.append({
                         "category": category,
                         "query": query,
-                        "start": moment["start"],
-                        "end": moment["end"],
+                        "start": moment["start_time"],
+                        "end": moment["end_time"],
                         "confidence": moment["confidence"],
                         "transcript": moment.get("transcript", ""),
                     })
