@@ -227,10 +227,10 @@ class TwelveLabsService:
 
     async def generate_interview_summary(self, video_id: str) -> str:
         """
-        Generate a comprehensive summary of the interview.
+        Generate a comprehensive summary of the interview using GPT-4o.
 
-        Note: TwelveLabs v1.3 removed the /summarize endpoint.
-        We use search to find key moments and generate a summary based on that.
+        Extracts transcript snippets via TwelveLabs search, then uses
+        GPT-4o to generate a detailed recruiter-focused summary.
         """
         try:
             # Search for key interview moments to build context
@@ -238,19 +238,55 @@ class TwelveLabsService:
                 "explaining approach",
                 "discussing solution",
                 "problem solving",
+                "technical explanation",
+                "asking questions",
+                "debugging",
             ]
 
-            all_moments = []
+            all_transcripts = []
             for query in key_queries:
                 moments = await self.search_interview_moments(video_id, query)
-                all_moments.extend(moments[:2])  # Top 2 per query
+                for moment in moments[:2]:  # Top 2 per query
+                    if moment.get("transcript"):
+                        all_transcripts.append(moment["transcript"])
 
-            if not all_moments:
+            if not all_transcripts:
                 return "Interview video indexed successfully. Key moments can be searched using the search feature."
 
-            # Build summary from found moments
-            moment_count = len(all_moments)
-            return f"Interview video analyzed. Found {moment_count} key moments including problem-solving discussions, approach explanations, and technical decision points. Use the search feature to explore specific topics."
+            # Use GPT-4o to generate a detailed summary
+            from services.backboard import BackboardService
+            backboard = BackboardService(user_id="system")
+
+            transcript_text = "\n\n---\n\n".join(all_transcripts[:12])
+
+            system_prompt = """You are an expert technical recruiter analyzing a coding interview video.
+Write a detailed summary for hiring managers. Be specific and actionable.
+Focus on what makes this candidate unique. Use 3-4 paragraphs."""
+
+            user_message = f"""Based on these transcript excerpts from a technical interview, write a comprehensive summary for recruiters.
+
+Interview Transcript Excerpts:
+{transcript_text}
+
+Include in your summary:
+1. **Problem-Solving Approach**: How did the candidate approach the problem? Did they break it down, ask clarifying questions, or dive straight in?
+2. **Technical Competence**: What technical skills or knowledge did they demonstrate? Were their explanations accurate?
+3. **Communication Style**: How well did they articulate their thought process? Did they think out loud?
+4. **Areas of Strength**: What stood out positively?
+5. **Potential Concerns**: Any red flags or areas that need follow-up in future interviews?
+
+Write in a professional tone suitable for sharing with a hiring team."""
+
+            response = await backboard._call_model(
+                assistant_name="InterviewSummaryAssistant",
+                system_prompt=system_prompt,
+                user_message=user_message,
+                llm_provider="openai",
+                model_name="gpt-4o",
+                thread_key="interview_summary",
+            )
+
+            return response
 
         except Exception as e:
             print(f"TwelveLabs summary error: {e}")
