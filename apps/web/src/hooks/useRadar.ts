@@ -316,7 +316,7 @@ export function useFrustrationTracking(sessionId: string | null) {
         demo_boosts: number;
         demo_boost_score: number;
         message: string;
-      }>(`/radar/session/${sessionId}/frustration/boost`);
+      }>(`/radar/session/${sessionId}/frustration/boost`, {});
 
       // Immediately refetch to update UI
       await fetchFrustration();
