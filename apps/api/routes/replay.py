@@ -197,11 +197,15 @@ async def get_user_sessions(
         if code_history:
             final_code = code_history[-1].get("code")
 
-        # Check if session is proctored (has linked ProctoringSession)
-        proctoring = await Collections.proctoring_sessions().find_one({
-            "session_id": session_id
-        })
-        is_proctored = proctoring is not None
+        # Check if session is proctored
+        # First check the session's own is_proctored field, then check proctoring_sessions collection
+        is_proctored = session.get("is_proctored", False)
+        if not is_proctored:
+            # Fallback: check if there's a linked ProctoringSession
+            proctoring = await Collections.proctoring_sessions().find_one({
+                "session_id": session_id
+            })
+            is_proctored = proctoring is not None
 
         # Generate brief insights summary for proctored sessions
         insights_summary = None
