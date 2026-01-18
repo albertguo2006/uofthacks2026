@@ -4,7 +4,7 @@ Backboard.io Multi-Model AI Service + Direct Gemini API
 Using the backboard-sdk for proper API integration.
 
 Model routing (Two AI Models for hints + archetype):
-- Claude (anthropic/claude-3-5-sonnet) for empathetic hints [PRIMARY for hints]
+- Claude (anthropic/claude-3-7-sonnet-20250219) for empathetic hints [PRIMARY for hints]
   - generate_hint, generate_personalized_hint, generate_targeted_hint
   - generate_encouragement
   - Fallback: Gemini API
@@ -423,7 +423,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet",  # Claude for empathetic hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for empathetic hints
             thread_key=f"hints:{self.user_id}",
             use_memory=True,
         )
@@ -440,7 +440,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=f"Context: {context}",
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet",  # Claude for empathetic responses
+            model_name="claude-3-7-sonnet-20250219",  # Claude for empathetic responses
             thread_key=f"encouragement:{self.user_id}",
         )
 
@@ -483,7 +483,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet",  # Claude for personalized hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for personalized hints
             thread_key=f"personalized_hints:{self.user_id}",
             use_memory=True,
         )
@@ -1187,7 +1187,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet",  # Claude for targeted hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for targeted hints
             thread_key=f"targeted_hints:{self.user_id}:{hint_type}",
             use_memory=True,
         )
@@ -1261,7 +1261,7 @@ Please provide a contextual hint based on their journey so far."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet",  # Claude for contextual hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for contextual hints
             thread_key=f"session:{session_id}:hints",
             use_memory=True,
         )
