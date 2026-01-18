@@ -122,8 +122,25 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new Error(error.detail || 'Request failed');
+      let errorMessage = 'Request failed';
+      try {
+        const error = await response.json();
+        // Handle various error formats
+        if (typeof error.detail === 'string') {
+          errorMessage = error.detail;
+        } else if (typeof error.message === 'string') {
+          errorMessage = error.message;
+        } else if (typeof error.error === 'string') {
+          errorMessage = error.error;
+        } else if (error.detail && typeof error.detail === 'object') {
+          // Handle validation errors from FastAPI
+          errorMessage = JSON.stringify(error.detail);
+        }
+      } catch {
+        // If JSON parsing fails, use status text
+        errorMessage = `Request failed with status ${response.status}`;
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -366,6 +383,116 @@ class ApiClient {
       return;
     }
     return this.delete(`/recruiter/candidates/${candidateId}/videos/${videoId}`);
+  }
+
+  // Notification endpoints
+  async getNotifications(filter: 'all' | 'unread' = 'all', limit: number = 20, skip: number = 0): Promise<{
+    notifications: Array<{
+      notification_id: string;
+      recipient_id: string;
+      sender_id: string | null;
+      type: 'interview_request' | 'application_status' | 'message' | 'system';
+      title: string;
+      message: string;
+      is_read: boolean;
+      created_at: string;
+      read_at: string | null;
+      metadata?: any;
+    }>;
+  }> {
+    if (isDevMode()) {
+      // Return mock notifications for dev mode
+      const mockNotifications = [
+        {
+          notification_id: 'notif-1',
+          recipient_id: 'dev-user-123',
+          sender_id: 'recruiter-1',
+          type: 'interview_request' as const,
+          title: 'Interview Request from TechCorp',
+          message: 'You have been invited for a technical interview with TechCorp',
+          is_read: false,
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+          read_at: null,
+          metadata: {
+            company_name: 'TechCorp',
+            job_title: 'Senior Software Engineer',
+            interview_date: new Date(Date.now() + 86400000 * 3).toISOString(),
+            interview_type: 'technical',
+          }
+        },
+        {
+          notification_id: 'notif-2',
+          recipient_id: 'dev-user-123',
+          sender_id: 'system',
+          type: 'system' as const,
+          title: 'Profile Updated',
+          message: 'Your skill passport has been updated with your latest assessment results',
+          is_read: true,
+          created_at: new Date(Date.now() - 7200000).toISOString(),
+          read_at: new Date(Date.now() - 7200000).toISOString(),
+          metadata: null
+        }
+      ];
+
+      const filtered = filter === 'unread'
+        ? mockNotifications.filter(n => !n.is_read)
+        : mockNotifications;
+
+      return Promise.resolve({ notifications: filtered });
+    }
+
+    const params = new URLSearchParams({
+      filter,
+      limit: limit.toString(),
+      skip: skip.toString()
+    });
+    return this.get(`/notifications?${params}`);
+  }
+
+  async getNotificationCount(): Promise<{ total: number; unread: number }> {
+    if (isDevMode()) {
+      return Promise.resolve({ total: 2, unread: 1 });
+    }
+    return this.get('/notifications/count');
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<void> {
+    if (isDevMode()) {
+      return Promise.resolve();
+    }
+    return this.request(`/notifications/${notificationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_read: true })
+    });
+  }
+
+  async markAllNotificationsAsRead(): Promise<void> {
+    if (isDevMode()) {
+      return Promise.resolve();
+    }
+    return this.post('/notifications/mark-all-read', {});
+  }
+
+  async sendInterviewRequest(data: {
+    candidate_id: string;
+    job_id?: string;
+    job_title?: string;
+    company_name: string;
+    interview_date?: string;
+    interview_type?: 'phone' | 'video' | 'onsite' | 'technical';
+    message?: string;
+    meeting_link?: string;
+  }): Promise<any> {
+    if (isDevMode()) {
+      return Promise.resolve({
+        notification_id: 'new-notif-' + Date.now(),
+        ...data,
+        type: 'interview_request',
+        title: `Interview Request from ${data.company_name}`,
+        created_at: new Date().toISOString()
+      });
+    }
+    return this.post('/notifications/interview-request', data);
   }
 }
 

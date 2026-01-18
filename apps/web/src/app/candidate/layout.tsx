@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { SignOutButton } from '@/components/auth/SignOutButton';
 import NodeGraphBackground from '@/components/ui/NodeGraphBackground';
+import { InboxDropdown } from '@/components/notifications/InboxDropdown';
 
 function CandidateNav() {
   const searchParams = useSearchParams();
@@ -41,7 +42,8 @@ function CandidateNav() {
               My Passport
             </Link>
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center space-x-4">
+            <InboxDropdown />
             <SignOutButton />
           </div>
         </div>
