@@ -383,7 +383,54 @@ No markdown code blocks."""
             return {}
 
 
+    async def get_video_streaming_info(self, twelvelabs_video_id: str) -> dict:
+        """
+        Get streaming URLs and metadata from TwelveLabs for a video.
+
+        Returns dict with stream_url, thumbnail_url, and duration.
+        """
+        index_id = await self.get_or_create_index()
+        if not index_id or not self.api_key:
+            return {}
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{TWELVELABS_API_URL}/indexes/{index_id}/videos/{twelvelabs_video_id}",
+                    headers={"x-api-key": self.api_key},
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                result = {}
+
+                # Extract HLS streaming info
+                hls = data.get("hls", {})
+                if hls.get("video_url"):
+                    result["stream_url"] = hls["video_url"]
+                if hls.get("thumbnail_urls") and len(hls["thumbnail_urls"]) > 0:
+                    result["thumbnail_url"] = hls["thumbnail_urls"][0]
+
+                # Extract duration from system metadata
+                system_metadata = data.get("system_metadata", {})
+                if system_metadata.get("duration"):
+                    result["duration"] = system_metadata["duration"]
+
+                print(f"[TwelveLabs] Got streaming info for {twelvelabs_video_id}: {list(result.keys())}")
+                return result
+
+        except Exception as e:
+            print(f"[TwelveLabs] Error getting streaming info: {e}")
+            return {}
+
+
 # Standalone functions for background tasks (backward compatibility)
+
+
+async def get_video_streaming_info(twelvelabs_video_id: str) -> dict:
+    """Get streaming URLs for a video from TwelveLabs."""
+    service = TwelveLabsService()
+    return await service.get_video_streaming_info(twelvelabs_video_id)
 
 
 async def get_or_create_index() -> Optional[str]:

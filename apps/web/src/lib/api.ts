@@ -399,6 +399,8 @@ export interface VideoDetails {
   summary?: string;
   highlights?: InterviewHighlight[];
   communication_analysis?: CommunicationAnalysis;
+  stream_url?: string;  // HLS streaming URL
+  thumbnail_url?: string;  // Video thumbnail
 }
 
 // Analytics types
@@ -583,6 +585,8 @@ const MOCK_VIDEO_DETAILS: VideoDetails = {
   video_id: 'video-001',
   status: 'ready',
   duration_seconds: 1800,
+  stream_url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',  // Demo HLS stream for dev mode
+  thumbnail_url: 'https://picsum.photos/seed/interview/640/360',
   summary: 'The candidate demonstrated excellent communication skills and technical depth during this system design discussion. They showed clear thinking about trade-offs and asked relevant clarifying questions. Their approach to breaking down the problem was methodical, and they handled edge cases well.',
   highlights: [
     {
