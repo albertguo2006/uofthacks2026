@@ -10,10 +10,10 @@
     "javascript"
   ],
   "starter_codes": {
-    "python": "def two_sum(nums, target):\n    # Your code here\n    pass\n",
-    "javascript": "function twoSum(nums, target) {\n  // Your code here\n}\n\nmodule.exports = { twoSum };"
+    "python": "def solution(data):\n    nums = data['nums']\n    target = data['target']\n    # Your code here\n    pass\n",
+    "javascript": "function solution(data) {\n  const { nums, target } = data;\n  // Your code here\n}\n\nmodule.exports = { solution };"
   },
-  "solution_code": "def two_sum(nums, target):\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []",
+  "solution_code": "def solution(data):\n    nums = data['nums']\n    target = data['target']\n    seen = {}\n    for i, num in enumerate(nums):\n        complement = target - num\n        if complement in seen:\n            return [seen[complement], i]\n        seen[num] = i\n    return []",
   "test_cases": [
     {
       "input": {
