@@ -1,0 +1,81 @@
+{
+  "task_id": "debug-shopping-cart",
+  "title": "Debug Shopping Cart Calculator",
+  "language": "python",
+  "description": "## Problem\n\nYou've inherited a shopping cart total calculator that has a bug. Users are reporting that the total is sometimes incorrect when applying discounts.\n\n## Current Implementation Issues\n\nThe function should:\n1. Calculate the subtotal of all items (price × quantity)\n2. Apply a discount percentage if provided (0-100)\n3. Add tax (default 13%)\n4. Return the final total rounded to 2 decimal places\n\nHowever, customers are complaining that:\n- Sometimes the discount isn't applied correctly\n- The tax calculation seems off\n- Edge cases aren't handled properly\n\n## Your Task\n\nDebug and fix the implementation. Make sure to handle all edge cases properly.\n\n## Example\n\n```\nInput: \nitems = [{\"name\": \"Book\", \"price\": 15.99, \"quantity\": 2},\n         {\"name\": \"Pen\", \"price\": 1.49, \"quantity\": 5}]\ndiscount = 10  # 10% off\ntax_rate = 13  # 13% tax\n\nExpected: Total after 10% discount and 13% tax\n```",
+  "difficulty": "medium",
+  "category": "bugfix",
+  "languages": [
+    "python",
+    "javascript"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    items = data['items']\n    discount = data.get('discount', 0)\n    tax_rate = data.get('tax_rate', 13)\n    \n    # BUG: This implementation has multiple issues\n    total = 0\n    for item in items:\n        total = item['price'] * item['quantity']\n    \n    # Apply discount\n    if discount:\n        total = total - (total * discount)\n    \n    # Apply tax\n    total = total + (total * tax_rate / 100)\n    \n    return round(total, 2)\n",
+    "javascript": "function solution(data) {\n  const { items, discount = 0, tax_rate = 13 } = data;\n  \n  // BUG: This implementation has multiple issues\n  let total = 0;\n  for (const item of items) {\n    total = item.price * item.quantity;\n  }\n  \n  // Apply discount\n  if (discount) {\n    total = total - (total * discount);\n  }\n  \n  // Apply tax\n  total = total + (total * tax_rate / 100);\n  \n  return Math.round(total * 100) / 100;\n}\n\nmodule.exports = { solution };"
+  },
+  "solution_code": "def solution(data):\n    items = data['items']\n    discount = data.get('discount', 0)\n    tax_rate = data.get('tax_rate', 13)\n    \n    # Calculate subtotal (FIX: += instead of =)\n    total = 0\n    for item in items:\n        total += item['price'] * item['quantity']\n    \n    # Apply discount (FIX: divide by 100 for percentage)\n    if discount > 0 and discount <= 100:\n        total = total - (total * discount / 100)\n    \n    # Apply tax\n    total = total + (total * tax_rate / 100)\n    \n    return round(total, 2)",
+  "test_cases": [
+    {
+      "input": {
+        "items": [
+          {"name": "Book", "price": 15.99, "quantity": 2},
+          {"name": "Pen", "price": 1.49, "quantity": 5}
+        ],
+        "discount": 10,
+        "tax_rate": 13
+      },
+      "expected_output": 36.17,
+      "hidden": false
+    },
+    {
+      "input": {
+        "items": [
+          {"name": "Laptop", "price": 999.99, "quantity": 1}
+        ],
+        "discount": 0,
+        "tax_rate": 13
+      },
+      "expected_output": 1129.99,
+      "hidden": false
+    },
+    {
+      "input": {
+        "items": [
+          {"name": "Coffee", "price": 4.50, "quantity": 3},
+          {"name": "Sandwich", "price": 8.99, "quantity": 2}
+        ],
+        "discount": 20,
+        "tax_rate": 13
+      },
+      "expected_output": 28.22,
+      "hidden": false
+    },
+    {
+      "input": {
+        "items": [],
+        "discount": 10,
+        "tax_rate": 13
+      },
+      "expected_output": 0.0,
+      "hidden": true
+    },
+    {
+      "input": {
+        "items": [
+          {"name": "Item1", "price": 100, "quantity": 1}
+        ],
+        "discount": 100,
+        "tax_rate": 13
+      },
+      "expected_output": 0.0,
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5,
+  "proctored": true,
+  "tags": [
+    "debugging",
+    "edge-cases",
+    "calculations"
+  ]
+}

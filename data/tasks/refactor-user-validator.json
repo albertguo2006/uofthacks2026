@@ -1,0 +1,86 @@
+{
+  "task_id": "refactor-user-validator",
+  "title": "Refactor User Input Validator",
+  "language": "python",
+  "description": "## Problem\n\nYou've been asked to review and refactor a user input validation function during a code review. The current implementation works but has several code quality issues.\n\n## Current Implementation Problems\n\n1. Poor variable naming\n2. Repetitive code\n3. Magic numbers without explanation\n4. No separation of concerns\n5. Inefficient string operations\n\n## Requirements\n\nRefactor the code to:\n1. Validate email format (must contain @ and .)\n2. Validate password (min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit)\n3. Validate age (must be 18-120)\n4. Return a dictionary with 'valid' (boolean) and 'errors' (list of error messages)\n\n## Your Task\n\nRefactor the code to be clean, readable, and maintainable while keeping the same functionality.\n\n## Example\n\n```\nInput: \nemail = \"john@example.com\"\npassword = \"SecurePass123\"\nage = 25\n\nOutput: {\"valid\": true, \"errors\": []}\n```",
+  "difficulty": "medium",
+  "category": "refactor",
+  "languages": [
+    "python",
+    "javascript"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    e = data['email']\n    p = data['password']\n    a = data['age']\n    \n    # This code works but needs refactoring\n    r = {'valid': True, 'errors': []}\n    \n    # Check email\n    x = False\n    y = False\n    for c in e:\n        if c == '@':\n            x = True\n        if c == '.':\n            y = True\n    if not x or not y:\n        r['valid'] = False\n        r['errors'].append('Invalid email')\n    \n    # Check password\n    if len(p) < 8:\n        r['valid'] = False\n        r['errors'].append('Password too short')\n    else:\n        u = False\n        l = False\n        d = False\n        for c in p:\n            if c >= 'A' and c <= 'Z':\n                u = True\n            if c >= 'a' and c <= 'z':\n                l = True\n            if c >= '0' and c <= '9':\n                d = True\n        if not u:\n            r['valid'] = False\n            r['errors'].append('Password needs uppercase')\n        if not l:\n            r['valid'] = False\n            r['errors'].append('Password needs lowercase')\n        if not d:\n            r['valid'] = False\n            r['errors'].append('Password needs digit')\n    \n    # Check age\n    if a < 18:\n        r['valid'] = False\n        r['errors'].append('Too young')\n    if a > 120:\n        r['valid'] = False\n        r['errors'].append('Invalid age')\n    \n    return r\n",
+    "javascript": "function solution(data) {\n  const e = data.email;\n  const p = data.password;\n  const a = data.age;\n  \n  // This code works but needs refactoring\n  const r = {valid: true, errors: []};\n  \n  // Check email\n  let x = false;\n  let y = false;\n  for (let c of e) {\n    if (c === '@') x = true;\n    if (c === '.') y = true;\n  }\n  if (!x || !y) {\n    r.valid = false;\n    r.errors.push('Invalid email');\n  }\n  \n  // Check password\n  if (p.length < 8) {\n    r.valid = false;\n    r.errors.push('Password too short');\n  } else {\n    let u = false;\n    let l = false;\n    let d = false;\n    for (let c of p) {\n      if (c >= 'A' && c <= 'Z') u = true;\n      if (c >= 'a' && c <= 'z') l = true;\n      if (c >= '0' && c <= '9') d = true;\n    }\n    if (!u) {\n      r.valid = false;\n      r.errors.push('Password needs uppercase');\n    }\n    if (!l) {\n      r.valid = false;\n      r.errors.push('Password needs lowercase');\n    }\n    if (!d) {\n      r.valid = false;\n      r.errors.push('Password needs digit');\n    }\n  }\n  \n  // Check age\n  if (a < 18) {\n    r.valid = false;\n    r.errors.push('Too young');\n  }\n  if (a > 120) {\n    r.valid = false;\n    r.errors.push('Invalid age');\n  }\n  \n  return r;\n}\n\nmodule.exports = { solution };"
+  },
+  "solution_code": "def solution(data):\n    email = data['email']\n    password = data['password']\n    age = data['age']\n    \n    result = {'valid': True, 'errors': []}\n    \n    # Validate email\n    if '@' not in email or '.' not in email:\n        result['valid'] = False\n        result['errors'].append('Invalid email')\n    \n    # Validate password\n    MIN_PASSWORD_LENGTH = 8\n    \n    if len(password) < MIN_PASSWORD_LENGTH:\n        result['valid'] = False\n        result['errors'].append('Password too short')\n    else:\n        has_uppercase = any(c.isupper() for c in password)\n        has_lowercase = any(c.islower() for c in password)\n        has_digit = any(c.isdigit() for c in password)\n        \n        if not has_uppercase:\n            result['valid'] = False\n            result['errors'].append('Password needs uppercase')\n        if not has_lowercase:\n            result['valid'] = False\n            result['errors'].append('Password needs lowercase')\n        if not has_digit:\n            result['valid'] = False\n            result['errors'].append('Password needs digit')\n    \n    # Validate age\n    MIN_AGE = 18\n    MAX_AGE = 120\n    \n    if age < MIN_AGE:\n        result['valid'] = False\n        result['errors'].append('Too young')\n    elif age > MAX_AGE:\n        result['valid'] = False\n        result['errors'].append('Invalid age')\n    \n    return result",
+  "test_cases": [
+    {
+      "input": {
+        "email": "john@example.com",
+        "password": "SecurePass123",
+        "age": 25
+      },
+      "expected_output": {
+        "valid": true,
+        "errors": []
+      },
+      "hidden": false
+    },
+    {
+      "input": {
+        "email": "invalid-email",
+        "password": "short",
+        "age": 15
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": ["Invalid email", "Password too short", "Too young"]
+      },
+      "hidden": false
+    },
+    {
+      "input": {
+        "email": "test@domain.com",
+        "password": "alllowercase123",
+        "age": 30
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": ["Password needs uppercase"]
+      },
+      "hidden": false
+    },
+    {
+      "input": {
+        "email": "user@test.org",
+        "password": "ALLUPPERCASE123",
+        "age": 18
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": ["Password needs lowercase"]
+      },
+      "hidden": true
+    },
+    {
+      "input": {
+        "email": "admin@site.io",
+        "password": "NoDigitsHere",
+        "age": 121
+      },
+      "expected_output": {
+        "valid": false,
+        "errors": ["Password needs digit", "Invalid age"]
+      },
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5,
+  "proctored": true,
+  "tags": [
+    "refactoring",
+    "code-quality",
+    "validation"
+  ]
+}

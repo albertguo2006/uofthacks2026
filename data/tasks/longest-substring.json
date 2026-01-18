@@ -1,0 +1,68 @@
+{
+  "task_id": "longest-substring",
+  "title": "Longest Substring Without Repeating Characters",
+  "language": "python",
+  "description": "## Problem\n\nGiven a string s, find the length of the longest substring without repeating characters.\n\n## Requirements\n\n1. The substring must be contiguous\n2. Each character in the substring must be unique\n3. Return the length of the longest such substring\n\n## Examples\n\n```\nInput: s = \"abcabcbb\"\nOutput: 3\nExplanation: The answer is \"abc\", with length 3.\n\nInput: s = \"bbbbb\"\nOutput: 1\nExplanation: The answer is \"b\", with length 1.\n\nInput: s = \"pwwkew\"\nOutput: 3\nExplanation: The answer is \"wke\", with length 3.\n```\n\n## Hint\n\nConsider using a sliding window approach with a hash map to track character positions.",
+  "difficulty": "hard",
+  "category": "feature",
+  "languages": [
+    "python",
+    "javascript"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    s = data['s']\n    # Your code here - find longest substring without repeating chars\n    pass\n",
+    "javascript": "function solution(data) {\n  const { s } = data;\n  // Your code here - find longest substring without repeating chars\n}\n\nmodule.exports = { solution };"
+  },
+  "solution_code": "def solution(data):\n    s = data['s']\n    if not s:\n        return 0\n    \n    char_index = {}\n    max_length = 0\n    start = 0\n    \n    for end in range(len(s)):\n        if s[end] in char_index and char_index[s[end]] >= start:\n            start = char_index[s[end]] + 1\n        \n        char_index[s[end]] = end\n        max_length = max(max_length, end - start + 1)\n    \n    return max_length",
+  "test_cases": [
+    {
+      "input": {
+        "s": "abcabcbb"
+      },
+      "expected_output": 3,
+      "hidden": false
+    },
+    {
+      "input": {
+        "s": "bbbbb"
+      },
+      "expected_output": 1,
+      "hidden": false
+    },
+    {
+      "input": {
+        "s": "pwwkew"
+      },
+      "expected_output": 3,
+      "hidden": false
+    },
+    {
+      "input": {
+        "s": ""
+      },
+      "expected_output": 0,
+      "hidden": true
+    },
+    {
+      "input": {
+        "s": "dvdf"
+      },
+      "expected_output": 3,
+      "hidden": true
+    },
+    {
+      "input": {
+        "s": "abcdefghijklmnopqrstuvwxyz"
+      },
+      "expected_output": 26,
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5,
+  "proctored": true,
+  "tags": [
+    "strings",
+    "sliding-window",
+    "hash-table"
+  ]
+}

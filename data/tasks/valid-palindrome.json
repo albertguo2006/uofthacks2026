@@ -1,0 +1,60 @@
+{
+  "task_id": "valid-palindrome",
+  "title": "Valid Palindrome Checker",
+  "language": "python",
+  "description": "## Problem\n\nA phrase is a palindrome if, after converting all uppercase letters into lowercase letters and removing all non-alphanumeric characters, it reads the same forward and backward.\n\n## Requirements\n\n1. Only consider alphanumeric characters (letters and numbers)\n2. Ignore case when comparing\n3. Return true if the string is a palindrome, false otherwise\n\n## Examples\n\n```\nInput: \"A man, a plan, a canal: Panama\"\nOutput: true\nExplanation: \"amanaplanacanalpanama\" is a palindrome.\n\nInput: \"race a car\"\nOutput: false\nExplanation: \"raceacar\" is not a palindrome.\n```",
+  "difficulty": "medium",
+  "category": "feature",
+  "languages": [
+    "python",
+    "javascript"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    s = data['s']\n    # Your code here\n    pass\n",
+    "javascript": "function solution(data) {\n  const { s } = data;\n  // Your code here\n}\n\nmodule.exports = { solution };"
+  },
+  "solution_code": "def solution(data):\n    s = data['s']\n    # Filter to alphanumeric and lowercase\n    cleaned = ''.join(char.lower() for char in s if char.isalnum())\n    # Check if palindrome\n    return cleaned == cleaned[::-1]",
+  "test_cases": [
+    {
+      "input": {
+        "s": "A man, a plan, a canal: Panama"
+      },
+      "expected_output": true,
+      "hidden": false
+    },
+    {
+      "input": {
+        "s": "race a car"
+      },
+      "expected_output": false,
+      "hidden": false
+    },
+    {
+      "input": {
+        "s": " "
+      },
+      "expected_output": true,
+      "hidden": false
+    },
+    {
+      "input": {
+        "s": "0P"
+      },
+      "expected_output": false,
+      "hidden": true
+    },
+    {
+      "input": {
+        "s": "ab_a"
+      },
+      "expected_output": true,
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5,
+  "proctored": true,
+  "tags": [
+    "strings",
+    "two-pointers"
+  ]
+}

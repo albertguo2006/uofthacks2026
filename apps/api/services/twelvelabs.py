@@ -97,7 +97,7 @@ class TwelveLabsService:
                     "index_name": index_name,
                     "models": [
                         {
-                            "model_name": "marengo2.7",
+                            "model_name": "marengo3.0",  # Marengo 3.0 includes transcription in audio
                             "model_options": ["visual", "audio"],
                         }
                     ],

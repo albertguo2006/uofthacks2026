@@ -1,0 +1,60 @@
+{
+  "task_id": "find-peak-element",
+  "title": "Find Peak Element",
+  "language": "python",
+  "description": "## Problem\n\nA peak element is an element that is strictly greater than its neighbors. Given a 0-indexed integer array, find a peak element and return its index.\n\n## Requirements\n\n1. If the array contains multiple peaks, return the index to any of the peaks\n2. You must write an algorithm that runs in O(log n) time\n3. For corner elements, consider only one neighbor\n4. nums[i] != nums[i + 1] for all valid i\n\n## Examples\n\n```\nInput: nums = [1,2,3,1]\nOutput: 2\nExplanation: 3 is a peak element, at index 2.\n\nInput: nums = [1,2,1,3,5,6,4]\nOutput: 5 (or 1)\nExplanation: Both index 1 and 5 are valid peaks.\n```",
+  "difficulty": "medium",
+  "category": "feature",
+  "languages": [
+    "python",
+    "javascript"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    nums = data['nums']\n    # Your code here - implement binary search\n    pass\n",
+    "javascript": "function solution(data) {\n  const { nums } = data;\n  // Your code here - implement binary search\n}\n\nmodule.exports = { solution };"
+  },
+  "solution_code": "def solution(data):\n    nums = data['nums']\n    left, right = 0, len(nums) - 1\n    \n    while left < right:\n        mid = left + (right - left) // 2\n        \n        if nums[mid] < nums[mid + 1]:\n            # Peak is in the right half\n            left = mid + 1\n        else:\n            # Peak is at mid or in the left half\n            right = mid\n    \n    return left",
+  "test_cases": [
+    {
+      "input": {
+        "nums": [1, 2, 3, 1]
+      },
+      "expected_output": 2,
+      "hidden": false
+    },
+    {
+      "input": {
+        "nums": [1, 2, 1, 3, 5, 6, 4]
+      },
+      "expected_output": 5,
+      "hidden": false
+    },
+    {
+      "input": {
+        "nums": [1]
+      },
+      "expected_output": 0,
+      "hidden": false
+    },
+    {
+      "input": {
+        "nums": [2, 1]
+      },
+      "expected_output": 0,
+      "hidden": true
+    },
+    {
+      "input": {
+        "nums": [1, 2]
+      },
+      "expected_output": 1,
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5,
+  "proctored": false,
+  "tags": [
+    "arrays",
+    "binary-search"
+  ]
+}

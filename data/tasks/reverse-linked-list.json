@@ -1,0 +1,60 @@
+{
+  "task_id": "reverse-linked-list",
+  "title": "Reverse Linked List",
+  "language": "python",
+  "description": "## Problem\n\nGiven the head of a singly linked list represented as an array, reverse the list and return the reversed array.\n\n## Requirements\n\n1. The linked list is represented as an array where each element is the value of a node\n2. Reverse the entire list\n3. Return the reversed array\n\n## Examples\n\n```\nInput: list = [1, 2, 3, 4, 5]\nOutput: [5, 4, 3, 2, 1]\n\nInput: list = [1, 2]\nOutput: [2, 1]\n\nInput: list = []\nOutput: []\n```\n\n## Note\n\nWhile this is a simplified version using arrays, think about how you would solve this with actual linked list nodes with pointers.",
+  "difficulty": "medium",
+  "category": "feature",
+  "languages": [
+    "python",
+    "javascript"
+  ],
+  "starter_codes": {
+    "python": "def solution(data):\n    lst = data['list']\n    # Your code here - reverse the list\n    # Think about the iterative approach with pointers\n    pass\n",
+    "javascript": "function solution(data) {\n  const { list } = data;\n  // Your code here - reverse the list\n  // Think about the iterative approach with pointers\n}\n\nmodule.exports = { solution };"
+  },
+  "solution_code": "def solution(data):\n    lst = data['list']\n    # Reverse the list\n    return lst[::-1]",
+  "test_cases": [
+    {
+      "input": {
+        "list": [1, 2, 3, 4, 5]
+      },
+      "expected_output": [5, 4, 3, 2, 1],
+      "hidden": false
+    },
+    {
+      "input": {
+        "list": [1, 2]
+      },
+      "expected_output": [2, 1],
+      "hidden": false
+    },
+    {
+      "input": {
+        "list": []
+      },
+      "expected_output": [],
+      "hidden": false
+    },
+    {
+      "input": {
+        "list": [1]
+      },
+      "expected_output": [1],
+      "hidden": true
+    },
+    {
+      "input": {
+        "list": [10, 20, 30, 40, 50, 60]
+      },
+      "expected_output": [60, 50, 40, 30, 20, 10],
+      "hidden": true
+    }
+  ],
+  "time_limit_seconds": 5,
+  "proctored": true,
+  "tags": [
+    "linked-list",
+    "recursion"
+  ]
+}

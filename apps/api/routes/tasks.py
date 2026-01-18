@@ -40,7 +40,7 @@ async def list_tasks(current_user: dict = Depends(get_current_user)):
 
         # For proctored tasks, hide description until session starts (unless completed)
         if is_proctored and not task_completed:
-            title = "[PROCTORED TASK]"
+            title = task["title"]
             description = "Start proctored session to view task details"
         else:
             title = task["title"]
