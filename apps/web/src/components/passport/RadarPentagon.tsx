@@ -15,14 +15,15 @@ interface RadarPoint {
   shortLabel: string;
   key: keyof RadarProfile;
   value: number;
+  description: string;
 }
 
-const RADAR_DIMENSIONS: { label: string; shortLabel: string; key: keyof RadarProfile }[] = [
-  { label: 'Verification', shortLabel: 'Verification', key: 'verification' },
-  { label: 'Velocity', shortLabel: 'Velocity', key: 'velocity' },
-  { label: 'Optimization', shortLabel: 'Optimization', key: 'optimization' },
-  { label: 'Decomposition', shortLabel: 'Decomposition', key: 'decomposition' },
-  { label: 'Debugging', shortLabel: 'Debugging', key: 'debugging' },
+const RADAR_DIMENSIONS: { label: string; shortLabel: string; key: keyof RadarProfile; description: string }[] = [
+  { label: 'Verification', shortLabel: 'Verification', key: 'verification', description: 'Thoroughness in testing and validating code correctness' },
+  { label: 'Velocity', shortLabel: 'Velocity', key: 'velocity', description: 'Speed of iterating and implementing solutions' },
+  { label: 'Optimization', shortLabel: 'Optimization', key: 'optimization', description: 'Ability to improve code performance and efficiency' },
+  { label: 'Decomposition', shortLabel: 'Decomposition', key: 'decomposition', description: 'Breaking complex problems into smaller, manageable parts' },
+  { label: 'Debugging', shortLabel: 'Debugging', key: 'debugging', description: 'Skill in identifying and fixing code issues' },
 ];
 
 const DEFAULT_PROFILE: RadarProfile = {
@@ -216,12 +217,13 @@ export function RadarPentagon({
             return (
               <div
                 key={point.key}
-                className="absolute text-center"
+                className="absolute text-center group"
                 style={{
                   left: x,
                   top: y,
                   transform: `translate(${translateX}, ${translateY})`,
                 }}
+                title={point.description}
               >
                 <span className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                   {point.shortLabel}
