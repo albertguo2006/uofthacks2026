@@ -75,37 +75,24 @@ class BackboardService:
             return _assistant_cache[cache_key]
 
         try:
-            # Try different parameter names for SDK compatibility
-            # Newer SDK (1.4+) uses 'system_prompt', older uses 'description'
-            try:
-                assistant = await self.client.create_assistant(
-                    name=name,
-                    system_prompt=system_prompt
-                )
-            except TypeError as te:
-                if "system_prompt" in str(te):
-                    # Fallback to older SDK parameter name
-                    print(f"{YELLOW}[Backboard] Using legacy SDK parameter 'description'{RESET}")
-                    assistant = await self.client.create_assistant(
-                        name=name,
-                        description=system_prompt
-                    )
-                else:
-                    raise te
-            
+            # SDK v1.4+ uses 'system_prompt' parameter
+            assistant = await self.client.create_assistant(
+                name=name,
+                system_prompt=system_prompt
+            )
             assistant_id_str = str(assistant.assistant_id)
             _assistant_cache[cache_key] = assistant_id_str
             print(f"{GREEN}[Backboard] Created assistant: {name} ({assistant_id_str[:12]}...){RESET}")
             return assistant_id_str
         except Exception as e:
-            # Truncate error message to avoid logging huge HTML responses
+            # Log full error details for debugging
             error_msg = str(e)
-            if len(error_msg) > 200:
-                error_msg = error_msg[:200] + "... [truncated]"
-            # Check if it's an HTML response (API error page)
-            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
-                error_msg = "API returned HTML error page (likely 404 or server error)"
-            print(f"{RED}[Backboard] Failed to create assistant {name}: {error_msg}{RESET}")
+            error_type = type(e).__name__
+            print(f"{RED}[Backboard] Failed to create assistant {name}{RESET}")
+            print(f"{RED}[Backboard] Error type: {error_type}{RESET}")
+            print(f"{RED}[Backboard] Error message: {error_msg[:500]}{RESET}")
+            if len(error_msg) > 500:
+                print(f"{RED}[Backboard] (message truncated, full length: {len(error_msg)} chars){RESET}")
             return None
 
     async def _get_or_create_thread(self, assistant_id: str, thread_key: str) -> Optional[str]:
@@ -124,13 +111,12 @@ class BackboardService:
             print(f"{DIM}[Backboard] Created thread for {thread_key[:20]}...{RESET}")
             return thread_id_str
         except Exception as e:
-            # Truncate error message to avoid logging huge HTML responses
+            # Log full error details for debugging
             error_msg = str(e)
-            if len(error_msg) > 200:
-                error_msg = error_msg[:200] + "... [truncated]"
-            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
-                error_msg = "API returned HTML error page (likely 404 or server error)"
-            print(f"{RED}[Backboard] Failed to create thread: {error_msg}{RESET}")
+            error_type = type(e).__name__
+            print(f"{RED}[Backboard] Failed to create thread{RESET}")
+            print(f"{RED}[Backboard] Error type: {error_type}{RESET}")
+            print(f"{RED}[Backboard] Error message: {error_msg[:500]}{RESET}")
             return None
 
     async def _call_model(
@@ -422,7 +408,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for empathetic hints
+            model_name="claude-3-5-sonnet",  # Claude for empathetic hints
             thread_key=f"hints:{self.user_id}",
             use_memory=True,
         )
@@ -439,7 +425,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=f"Context: {context}",
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for empathetic responses
+            model_name="claude-3-5-sonnet",  # Claude for empathetic responses
             thread_key=f"encouragement:{self.user_id}",
         )
 
@@ -482,7 +468,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for personalized hints
+            model_name="claude-3-5-sonnet",  # Claude for personalized hints
             thread_key=f"personalized_hints:{self.user_id}",
             use_memory=True,
         )
@@ -1186,7 +1172,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for targeted hints
+            model_name="claude-3-5-sonnet",  # Claude for targeted hints
             thread_key=f"targeted_hints:{self.user_id}:{hint_type}",
             use_memory=True,
         )
@@ -1260,7 +1246,7 @@ Please provide a contextual hint based on their journey so far."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for contextual hints
+            model_name="claude-3-5-sonnet",  # Claude for contextual hints
             thread_key=f"session:{session_id}:hints",
             use_memory=True,
         )
