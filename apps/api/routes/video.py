@@ -87,8 +87,10 @@ async def get_video_status(
             detail="Video not found",
         )
 
-    # Check ownership
-    if video["user_id"] != current_user["user_id"] and current_user["role"] != "recruiter":
+    # Check ownership - candidates can view own videos, recruiters can only view videos they uploaded
+    is_owner = video["user_id"] == current_user["user_id"]
+    is_uploader = video.get("uploaded_by") == current_user["user_id"]
+    if not is_owner and not is_uploader:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this video",
@@ -119,8 +121,10 @@ async def get_video_details(
             detail="Video not found",
         )
 
-    # Check ownership
-    if video["user_id"] != current_user["user_id"] and current_user["role"] != "recruiter":
+    # Check ownership - candidates can view own videos, recruiters can only view videos they uploaded
+    is_owner = video["user_id"] == current_user["user_id"]
+    is_uploader = video.get("uploaded_by") == current_user["user_id"]
+    if not is_owner and not is_uploader:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this video",
@@ -176,6 +180,15 @@ async def search_video_content(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found",
+        )
+
+    # Check ownership - candidates can view own videos, recruiters can only view videos they uploaded
+    is_owner = video["user_id"] == current_user["user_id"]
+    is_uploader = video.get("uploaded_by") == current_user["user_id"]
+    if not is_owner and not is_uploader:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to search this video",
         )
 
     if video["status"] != "ready":

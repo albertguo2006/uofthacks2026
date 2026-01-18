@@ -359,6 +359,14 @@ class ApiClient {
     }
     return this.get(`/video/${videoId}/details`);
   }
+
+  async deleteCandidateVideo(candidateId: string, videoId: string): Promise<void> {
+    if (isDevMode()) {
+      // Simulate deletion in dev mode
+      return;
+    }
+    return this.delete(`/recruiter/candidates/${candidateId}/videos/${videoId}`);
+  }
 }
 
 // Video types

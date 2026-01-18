@@ -389,6 +389,14 @@ async def upload_video_to_twelvelabs(
             with open(file_path, "rb") as f:
                 file_content = f.read()
 
+            # Debug: Log file size and first bytes to help diagnose issues
+            file_size = len(file_content)
+            print(f"[TwelveLabs] File size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
+            print(f"[TwelveLabs] First 12 bytes (hex): {file_content[:12].hex()}")
+
+            if file_size < 10000:  # Less than 10KB is suspicious
+                print(f"[TwelveLabs] WARNING: File is very small, may not be a valid video")
+
             files = {"video_file": (os.path.basename(file_path), file_content, content_type)}
             data = {"index_id": index_id}
 

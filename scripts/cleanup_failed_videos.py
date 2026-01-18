@@ -15,6 +15,18 @@ Usage: python scripts/cleanup_failed_videos.py
 
 import asyncio
 import os
+import sys
+from pathlib import Path
+
+# Add the api directory to path for imports
+api_dir = Path(__file__).parent.parent / "apps" / "api"
+sys.path.insert(0, str(api_dir))
+
+# Load .env file from api directory
+from dotenv import load_dotenv
+env_path = api_dir / ".env"
+load_dotenv(env_path)
+
 from motor.motor_asyncio import AsyncIOMotorClient
 
 MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")

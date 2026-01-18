@@ -540,9 +540,9 @@ async def delete_candidate_video(
     current_user: dict = Depends(require_recruiter),
 ):
     """
-    Delete a video uploaded by the current recruiter for a candidate.
+    Delete a video for a candidate.
 
-    Only the recruiter who uploaded the video can delete it.
+    Recruiters can delete videos associated with candidates.
     """
     # Find the video
     video = await Collections.videos().find_one({"_id": video_id})
@@ -553,13 +553,6 @@ async def delete_candidate_video(
     # Verify video belongs to the specified candidate
     if video.get("user_id") != candidate_id:
         raise HTTPException(status_code=404, detail="Video not found for this candidate")
-
-    # Only allow deletion if recruiter uploaded this video
-    if video.get("uploaded_by") != current_user["user_id"]:
-        raise HTTPException(
-            status_code=403,
-            detail="You can only delete videos that you uploaded",
-        )
 
     # Delete the video file if it exists
     file_path = video.get("file_path")
