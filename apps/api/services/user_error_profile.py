@@ -37,10 +37,10 @@ async def compute_error_profile(user_id: str) -> dict:
         "timestamp": {"$gte": thirty_days_ago}
     }).to_list(1000)
 
-    # Fetch interventions to analyze effectiveness
+    # Fetch interventions to analyze effectiveness (use triggered_at field)
     interventions = await Collections.interventions().find({
         "user_id": user_id,
-        "timestamp": {"$gte": thirty_days_ago}
+        "triggered_at": {"$gte": thirty_days_ago}
     }).to_list(500)
 
     if not error_events:
