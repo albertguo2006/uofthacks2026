@@ -75,11 +75,26 @@ class BackboardService:
             return _assistant_cache[cache_key]
 
         try:
-            # SDK v1.4+ uses 'system_prompt' parameter
-            assistant = await self.client.create_assistant(
-                name=name,
-                system_prompt=system_prompt
-            )
+            # Try different parameter names for SDK compatibility
+            # Older SDK versions use 'description', newer use 'system_prompt'
+            assistant = None
+            try:
+                # Try newer SDK parameter name first
+                assistant = await self.client.create_assistant(
+                    name=name,
+                    system_prompt=system_prompt
+                )
+            except TypeError as te:
+                if "system_prompt" in str(te):
+                    # Fall back to older SDK parameter name
+                    print(f"{YELLOW}[Backboard] SDK uses 'description' parameter, retrying...{RESET}")
+                    assistant = await self.client.create_assistant(
+                        name=name,
+                        description=system_prompt
+                    )
+                else:
+                    raise
+            
             assistant_id_str = str(assistant.assistant_id)
             _assistant_cache[cache_key] = assistant_id_str
             print(f"{GREEN}[Backboard] Created assistant: {name} ({assistant_id_str[:12]}...){RESET}")
