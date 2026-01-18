@@ -50,21 +50,27 @@ export default function RecruiterLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ProtectedRoute role="recruiter">
-      <NodeGraphBackground
-        nodeCount={60}
-        connectionDistance={150}
-        cursorInfluenceRadius={150}
-        cursorRepelStrength={0.25}
-      />
-      <div className="min-h-screen relative z-10">
-        <Suspense fallback={<div className="h-16 bg-white/80 dark:bg-slate-800/80" />}>
-          <RecruiterNav />
-        </Suspense>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {children}
-        </main>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full" />
       </div>
-    </ProtectedRoute>
+    }>
+      <ProtectedRoute role="recruiter">
+        <NodeGraphBackground
+          nodeCount={60}
+          connectionDistance={150}
+          cursorInfluenceRadius={150}
+          cursorRepelStrength={0.25}
+        />
+        <div className="min-h-screen relative z-10">
+          <Suspense fallback={<div className="h-16 bg-white/80 dark:bg-slate-800/80" />}>
+            <RecruiterNav />
+          </Suspense>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {children}
+          </main>
+        </div>
+      </ProtectedRoute>
+    </Suspense>
   );
 }
