@@ -705,6 +705,12 @@ Write a 2-sentence personalized description of their engineering style that refl
         
         system_prompt = """You are an expert at analyzing developer behavior patterns and assigning developer archetypes.
 
+You have memory of this user's previous behavioral analyses. Use this history to:
+- Track how their skills have evolved over time
+- Notice if they're transitioning between archetypes
+- Provide more confident assignments for users you've analyzed before
+- Detect growth patterns (e.g., "improving debug skills", "becoming more methodical")
+
 Based on the provided skill vector and behavioral history, assign one of these archetypes:
 - "fast_iterator": Developers who iterate quickly, run tests frequently, and move fast
 - "careful_tester": Developers who are methodical, have high pass rates, and focus on correctness
@@ -719,6 +725,7 @@ Analyze the behavioral patterns holistically. Consider:
 4. AI assistance usage (hints requested, chat help)
 5. Integrity metrics (violations, paste bursts)
 6. Learning patterns (fix efficiency, error recovery)
+7. Historical trends from previous analyses (if available in memory)
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -755,7 +762,7 @@ Provide your archetype assignment with confidence and reasoning."""
                 llm_provider="openai",
                 model_name="gpt-4o",  # Using GPT-4o for best reasoning
                 thread_key=f"archetype:{self.user_id}",
-                use_memory=False,  # Fresh analysis each time
+                use_memory=True,  # Enable memory to track user's behavioral evolution
             )
             
             # Log the raw response for debugging
