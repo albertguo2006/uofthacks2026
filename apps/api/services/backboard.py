@@ -722,18 +722,18 @@ Analyze the behavioral patterns holistically. Consider:
 6. Learning patterns (fix efficiency, error recovery)
 
 Return ONLY valid JSON in this exact format:
-{
+{{
   "archetype": "archetype_name",
   "confidence": 0.X,
   "reasoning": "Brief 1-2 sentence explanation",
-  "adjustments": {
+  "adjustments": {{
     "fast_iterator": 0.X,
     "careful_tester": 0.X,
     "debugger": 0.X,
     "craftsman": 0.X,
     "explorer": 0.X
-  }
-}"""
+  }}
+}}"""
 
         user_message = f"""Analyze this developer's behavior and assign an archetype:
 
@@ -758,6 +758,10 @@ Provide your archetype assignment with confidence and reasoning."""
                 thread_key=f"archetype:{self.user_id}",
                 use_memory=False,  # Fresh analysis each time
             )
+            
+            # Log the raw response for debugging
+            print(f"{CYAN}[AI Archetype] Raw GPT-4 response:{RESET}")
+            print(f"{DIM}{response[:500]}{'...' if len(response) > 500 else ''}{RESET}")
             
             result = json.loads(self._strip_markdown_json(response))
             
@@ -786,6 +790,7 @@ Provide your archetype assignment with confidence and reasoning."""
             
         except json.JSONDecodeError as e:
             print(f"{RED}[AI Archetype] ✗ Failed to parse GPT-4 response: {e}{RESET}")
+            print(f"{RED}[AI Archetype] Raw response was: {response[:300]}{'...' if len(response) > 300 else ''}{RESET}")
             return self._fallback_archetype_assignment(skill_vector)
         except Exception as e:
             print(f"{RED}[AI Archetype] ✗ GPT-4 archetype assignment failed: {e}{RESET}")
