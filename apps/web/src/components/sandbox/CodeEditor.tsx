@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import Editor, { OnMount, OnChange } from '@monaco-editor/react';
-import { track } from '@/lib/telemetry';
+import { track, telemetry } from '@/lib/telemetry';
 import { debounce } from '@/lib/utils';
 
 interface CodeEditorProps {
@@ -13,6 +13,9 @@ interface CodeEditorProps {
   taskId: string;
 }
 
+// Threshold for detecting paste bursts (characters)
+const PASTE_BURST_THRESHOLD = 50;
+
 export function CodeEditor({
   value,
   onChange,
@@ -21,6 +24,26 @@ export function CodeEditor({
   taskId,
 }: CodeEditorProps) {
   const editorRef = useRef<any>(null);
+  const lastChangeTimeRef = useRef<number>(Date.now());
+  const tabHiddenAtRef = useRef<number | null>(null);
+
+  // Track tab visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        tabHiddenAtRef.current = Date.now();
+      } else if (tabHiddenAtRef.current) {
+        const durationAwayMs = Date.now() - tabHiddenAtRef.current;
+        telemetry.tabSwitch(sessionId, taskId, true, durationAwayMs);
+        tabHiddenAtRef.current = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [sessionId, taskId]);
 
   const trackEditorCommand = useCallback(
     (command: string, source: 'shortcut' | 'menu') => {
@@ -35,14 +58,23 @@ export function CodeEditor({
   );
 
   const trackCodeChange = useCallback(
-    debounce((linesChanged: number, charsAdded: number) => {
+    debounce((linesChanged: number, charsAdded: number, charsPasted: number) => {
       track('code_changed', {
         session_id: sessionId,
         task_id: taskId,
         lines_changed: linesChanged,
         chars_added: charsAdded,
+        chars_pasted: charsPasted,
       });
     }, 1000),
+    [sessionId, taskId]
+  );
+
+  const trackPasteBurst = useCallback(
+    (charsPasted: number) => {
+      const burstMs = Date.now() - lastChangeTimeRef.current;
+      telemetry.pasteBurstDetected(sessionId, taskId, charsPasted, burstMs);
+    },
     [sessionId, taskId]
   );
 
@@ -78,9 +110,18 @@ export function CodeEditor({
       const oldLines = value.split('\n').length;
       const newLines = newValue.split('\n').length;
       const charDiff = newValue.length - value.length;
+      const timeSinceLastChange = Date.now() - lastChangeTimeRef.current;
+
+      // Detect paste burst: large addition in short time
+      const isPasteBurst = charDiff > PASTE_BURST_THRESHOLD && timeSinceLastChange < 100;
+
+      if (isPasteBurst) {
+        trackPasteBurst(charDiff);
+      }
 
       onChange(newValue);
-      trackCodeChange(Math.abs(newLines - oldLines), charDiff);
+      trackCodeChange(Math.abs(newLines - oldLines), charDiff, isPasteBurst ? charDiff : 0);
+      lastChangeTimeRef.current = Date.now();
     }
   };
 

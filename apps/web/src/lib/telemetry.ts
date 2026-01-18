@@ -97,4 +97,12 @@ export const telemetry = {
 
   proctoringViolation: (taskId: string, sessionId: string, violationType: string, details?: string) =>
     track('proctoring_violation', { task_id: taskId, session_id: sessionId, violation_type: violationType, details }),
+
+  // Tab visibility tracking
+  tabSwitch: (sessionId: string, taskId: string, wasHidden: boolean, durationAwayMs?: number) =>
+    track('tab_switch', { session_id: sessionId, task_id: taskId, was_hidden: wasHidden, duration_away_ms: durationAwayMs }),
+
+  // Demo/debug events for triggering AI features
+  frustrationSignal: (sessionId: string, taskId: string, intensity: 'low' | 'medium' | 'high') =>
+    track('frustration_signal', { session_id: sessionId, task_id: taskId, intensity, demo_mode: true }),
 };

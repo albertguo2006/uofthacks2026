@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Intervention } from '@/hooks/useRadar';
+import { Intervention, BehaviorAnalysis } from '@/hooks/useRadar';
 
 interface HintContext {
   attempts?: number;
@@ -15,6 +15,46 @@ interface HintPanelProps {
   onDismiss?: () => void;
   context?: HintContext;
 }
+
+// Human-readable trigger reason labels
+const TRIGGER_REASON_LABELS: Record<string, { label: string; description: string }> = {
+  error_streak: {
+    label: 'Error Streak',
+    description: 'Multiple consecutive errors detected',
+  },
+  high_frustration_score: {
+    label: 'Frustration Detected',
+    description: 'Behavioral patterns suggest you might be stuck',
+  },
+  repeated_same_error: {
+    label: 'Repeated Error',
+    description: 'Same error occurring multiple times',
+  },
+  time_stuck: {
+    label: 'Time Stuck',
+    description: 'No successful progress for a while',
+  },
+  declining_performance: {
+    label: 'Declining Performance',
+    description: 'Test pass rate is going down',
+  },
+  stuck_not_changing_code: {
+    label: 'Stuck Pattern',
+    description: 'Not making code changes despite errors',
+  },
+  user_prefers_hints: {
+    label: 'Personalized',
+    description: 'Based on your hint preferences',
+  },
+  user_requested: {
+    label: 'You Asked',
+    description: 'You requested this hint',
+  },
+  demo_frustration_trigger: {
+    label: 'Demo Mode',
+    description: 'Frustration signal triggered for demonstration',
+  },
+};
 
 const HINT_CATEGORY_ICONS: Record<string, string> = {
   syntax: '{ }',
@@ -33,6 +73,7 @@ const HINT_CATEGORY_COLORS: Record<string, string> = {
 export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: HintPanelProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [showWhySection, setShowWhySection] = useState(false);
 
   useEffect(() => {
     if (intervention?.hint) {
@@ -50,6 +91,21 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: H
   const category = intervention.hint_category || 'approach';
   const icon = HINT_CATEGORY_ICONS[category] || '!';
   const colorClass = HINT_CATEGORY_COLORS[category] || HINT_CATEGORY_COLORS.approach;
+
+  // Get trigger reason info
+  const triggerReason = intervention.trigger_reason || 'unknown';
+  const triggerInfo = TRIGGER_REASON_LABELS[triggerReason] || {
+    label: 'AI Analysis',
+    description: 'Based on behavioral patterns',
+  };
+
+  // Format behavior metrics for display
+  const formatTimeStuck = (ms?: number) => {
+    if (!ms) return null;
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  };
 
   const handleAcknowledge = () => {
     setIsVisible(false);
@@ -142,6 +198,77 @@ export function HintPanel({ intervention, onAcknowledge, onDismiss, context }: H
                 )}
               </div>
             )}
+
+            {/* Why this hint section */}
+            <div className="mt-3 border-t border-white/10 pt-2">
+              <button
+                onClick={() => setShowWhySection(!showWhySection)}
+                className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors"
+              >
+                <svg
+                  className={`w-3 h-3 transition-transform ${showWhySection ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Why this hint?
+              </button>
+
+              {showWhySection && (
+                <div className="mt-2 p-2 bg-black/20 rounded text-xs space-y-2">
+                  {/* Trigger reason */}
+                  <div className="flex items-center gap-2">
+                    <span className="px-1.5 py-0.5 bg-primary-500/20 text-primary-300 rounded text-[10px] font-medium">
+                      {triggerInfo.label}
+                    </span>
+                    <span className="text-gray-400">{triggerInfo.description}</span>
+                  </div>
+
+                  {/* Behavior metrics */}
+                  {intervention.behavior_analysis && (
+                    <div className="grid grid-cols-2 gap-2 text-gray-400">
+                      {intervention.behavior_analysis.frustration_score !== undefined && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Frustration:</span>
+                          <span className={intervention.behavior_analysis.frustration_score >= 0.7 ? 'text-red-400' : intervention.behavior_analysis.frustration_score >= 0.4 ? 'text-yellow-400' : 'text-green-400'}>
+                            {Math.round(intervention.behavior_analysis.frustration_score * 100)}%
+                          </span>
+                        </div>
+                      )}
+                      {intervention.behavior_analysis.error_streak !== undefined && intervention.behavior_analysis.error_streak > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Error streak:</span>
+                          <span className="text-red-400">{intervention.behavior_analysis.error_streak}</span>
+                        </div>
+                      )}
+                      {intervention.behavior_analysis.time_stuck_ms !== undefined && intervention.behavior_analysis.time_stuck_ms > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Time stuck:</span>
+                          <span>{formatTimeStuck(intervention.behavior_analysis.time_stuck_ms)}</span>
+                        </div>
+                      )}
+                      {intervention.behavior_analysis.tests_passed_trend && intervention.behavior_analysis.tests_passed_trend !== 'stable' && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">Trend:</span>
+                          <span className={intervention.behavior_analysis.tests_passed_trend === 'improving' ? 'text-green-400' : 'text-red-400'}>
+                            {intervention.behavior_analysis.tests_passed_trend}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Models used */}
+                  {intervention.models_used && intervention.models_used.length > 0 && (
+                    <div className="text-gray-500 text-[10px]">
+                      AI: {intervention.models_used.join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Actions */}
             <div className="mt-3 flex items-center gap-3">

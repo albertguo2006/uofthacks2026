@@ -17,6 +17,16 @@ export interface RadarProfile {
   debugging?: RadarDimension;
 }
 
+export interface BehaviorAnalysis {
+  error_streak?: number;
+  time_stuck_ms?: number;
+  frustration_score?: number;
+  repeated_same_error?: boolean;
+  tests_passed_trend?: 'improving' | 'declining' | 'stable';
+  code_change_frequency?: 'minimal' | 'normal' | 'high';
+  last_error?: string;
+}
+
 export interface Intervention {
   hint: string | null;
   hint_category?: string;
@@ -25,6 +35,14 @@ export interface Intervention {
   triggered_at?: string;
   personalization_badge?: string;
   hint_style?: string;
+  // "Why this hint" data
+  trigger_reason?: string;
+  analysis?: {
+    error_type?: string;
+    suggested_fix?: string;
+  };
+  models_used?: string[];
+  behavior_analysis?: BehaviorAnalysis;
 }
 
 export interface RadarResponse {
@@ -202,7 +220,7 @@ export function useSessionIntervention(sessionId: string | null) {
         current_code: currentCode,
         current_error: currentError || null,
       });
-      
+
       // Update local intervention state with the new hint
       setIntervention({
         hint: response.hint,
@@ -210,10 +228,51 @@ export function useSessionIntervention(sessionId: string | null) {
         intervention_type: 'user_requested',
         session_id: sessionId,
       });
-      
+
       return response;
     } catch (err) {
       console.error('Failed to request contextual hint:', err);
+      return null;
+    }
+  }, [sessionId]);
+
+  /**
+   * Demo mode: Trigger frustration signal to immediately get a hint
+   * Use this during demos to show the AI intervention system
+   */
+  const triggerFrustration = useCallback(async (
+    taskId: string,
+    currentCode: string,
+    intensity: 'low' | 'medium' | 'high' = 'high',
+  ) => {
+    if (!sessionId) return null;
+
+    try {
+      const response = await api.post<{
+        status: string;
+        hint: string;
+        behavior_analysis: BehaviorAnalysis;
+        hint_id: string;
+      }>('/radar/demo/trigger-frustration', {
+        session_id: sessionId,
+        task_id: taskId,
+        current_code: currentCode,
+        intensity,
+      });
+
+      // Update local intervention state
+      setIntervention({
+        hint: response.hint,
+        hint_category: 'approach',
+        intervention_type: 'demo_triggered',
+        session_id: sessionId,
+        trigger_reason: 'demo_frustration_trigger',
+        behavior_analysis: response.behavior_analysis,
+      });
+
+      return response;
+    } catch (err) {
+      console.error('Failed to trigger frustration demo:', err);
       return null;
     }
   }, [sessionId]);
@@ -224,5 +283,6 @@ export function useSessionIntervention(sessionId: string | null) {
     acknowledgeHint,
     refetch: fetchIntervention,
     requestContextualHint,
+    triggerFrustration,
   };
 }

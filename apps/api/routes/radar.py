@@ -391,6 +391,12 @@ async def get_session_intervention(
             },
         )
 
+    # Get the full intervention record for behavior analysis
+    intervention_record = await Collections.interventions().find_one(
+        {"session_id": session_id, "user_id": user_id},
+        sort=[("triggered_at", -1)],
+    )
+
     return {
         "intervention": {
             "hint": ai_context.get("last_hint"),
@@ -402,6 +408,7 @@ async def get_session_intervention(
             "personalization_badge": ai_context.get("personalization_badge"),
             "hint_style": ai_context.get("hint_style"),
             "trigger_reason": ai_context.get("trigger_reason"),
+            "behavior_analysis": intervention_record.get("behavior_analysis") if intervention_record else None,
         }
     }
 
@@ -422,6 +429,141 @@ class ContextualHintResponse(BaseModel):
     hint: str
     context: dict
     hint_id: str
+
+
+# =========================================================================
+# DEMO MODE - Frustration trigger for demonstrations
+# =========================================================================
+
+
+class FrustrationTriggerRequest(BaseModel):
+    session_id: str
+    task_id: str
+    current_code: str
+    intensity: str = "high"  # low, medium, high
+
+
+@router.post("/demo/trigger-frustration")
+async def trigger_frustration_demo(
+    request: FrustrationTriggerRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Demo endpoint to manually trigger frustration detection and generate a hint.
+    Use this during demos to show the AI intervention system in action.
+    """
+    user_id = current_user["user_id"]
+
+    # Create simulated behavior analysis based on intensity
+    intensity_configs = {
+        "low": {"frustration_score": 0.4, "error_streak": 2, "time_stuck_ms": 60000},
+        "medium": {"frustration_score": 0.6, "error_streak": 3, "time_stuck_ms": 120000},
+        "high": {"frustration_score": 0.85, "error_streak": 5, "time_stuck_ms": 180000},
+    }
+
+    config = intensity_configs.get(request.intensity, intensity_configs["high"])
+
+    simulated_behavior = {
+        "frustration_score": config["frustration_score"],
+        "error_streak": config["error_streak"],
+        "time_stuck_ms": config["time_stuck_ms"],
+        "repeated_same_error": True,
+        "tests_passed_trend": "declining",
+        "code_change_frequency": "minimal",
+        "last_error": "Simulated error for demo",
+        "recent_errors": ["Error 1", "Error 2", "Error 3"],
+    }
+
+    # Get task info
+    task = await Collections.tasks().find_one({"task_id": request.task_id})
+    task_description = task.get("description", "Unknown task") if task else "Demo task"
+
+    # Generate hint using Backboard
+    backboard = BackboardService(user_id)
+
+    session_context = {
+        "code": request.current_code,
+        "last_error": "Demo: User triggered frustration signal",
+        "error_streak": config["error_streak"],
+        "time_stuck_ms": config["time_stuck_ms"],
+        "attempt_count": config["error_streak"],
+        "recent_errors": simulated_behavior["recent_errors"],
+        "repeated_same_error": True,
+        "task_description": task_description,
+        "intervention_reason": "demo_frustration_trigger",
+    }
+
+    # Get hint from AI
+    intervention = await backboard.adaptive_intervention(session_context, {})
+
+    if intervention["type"] == "none":
+        # Fallback hint if AI doesn't generate one
+        intervention = {
+            "type": "technical_hint",
+            "hint": "It looks like you're working through a challenging problem. Take a moment to review your approach - sometimes stepping back helps!",
+            "analysis": {"error_type": "demo"},
+            "model_used": ["fallback"],
+        }
+
+    # Store intervention in session
+    await Collections.sessions().update_one(
+        {"session_id": request.session_id},
+        {
+            "$set": {
+                "ai_context.is_stuck": True,
+                "ai_context.last_hint": intervention.get("hint"),
+                "ai_context.intervention_type": "demo_triggered",
+                "ai_context.models_used": intervention.get("model_used", []),
+                "ai_context.analysis": intervention.get("analysis"),
+                "ai_context.stuck_since": datetime.utcnow(),
+                "ai_context.hint_category": "approach",
+                "ai_context.trigger_reason": "demo_frustration_trigger",
+            },
+            "$inc": {"ai_context.intervention_count": 1},
+        },
+        upsert=True,
+    )
+
+    # Store intervention record with behavior analysis
+    hint_id = str(ObjectId())
+    await Collections.interventions().insert_one({
+        "_id": hint_id,
+        "session_id": request.session_id,
+        "user_id": user_id,
+        "task_id": request.task_id,
+        "triggered_at": datetime.utcnow(),
+        "trigger_reason": "demo_frustration_trigger",
+        "intervention_type": "demo_triggered",
+        "models_used": intervention.get("model_used", []),
+        "hint_text": intervention.get("hint"),
+        "hint_category": "approach",
+        "behavior_analysis": simulated_behavior,
+        "acknowledged": False,
+    })
+
+    # Track event to Amplitude
+    event_id = str(ObjectId())
+    background_tasks.add_task(
+        forward_to_amplitude,
+        event_id=event_id,
+        user_id=user_id,
+        event_type="frustration_signal",
+        timestamp=int(datetime.utcnow().timestamp() * 1000),
+        properties={
+            "session_id": request.session_id,
+            "task_id": request.task_id,
+            "intensity": request.intensity,
+            "demo_mode": True,
+        },
+    )
+
+    return {
+        "status": "hint_triggered",
+        "hint": intervention.get("hint"),
+        "behavior_analysis": simulated_behavior,
+        "hint_id": hint_id,
+    }
 
 
 @router.post("/session/hints", response_model=ContextualHintResponse)

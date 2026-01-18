@@ -135,9 +135,10 @@ export default function SandboxPage() {
   });
 
   // AI intervention hook with contextual hints
-  const { intervention, acknowledgeHint, requestContextualHint } = useSessionIntervention(sessionId);
+  const { intervention, acknowledgeHint, requestContextualHint, triggerFrustration } = useSessionIntervention(sessionId);
   const [hintContext, setHintContext] = useState<{ attempts?: number; repeated_errors?: boolean; code_history_length?: number } | undefined>();
   const [isRequestingHint, setIsRequestingHint] = useState(false);
+  const [isTriggeringFrustration, setIsTriggeringFrustration] = useState(false);
 
   // Helper to extract stderr from result
   const currentStderr = result?.type === 'run' ? result.data.stderr : undefined;
@@ -236,7 +237,7 @@ export default function SandboxPage() {
 
   const handleRequestHint = useCallback(async () => {
     if (!taskId || isRequestingHint) return;
-    
+
     setIsRequestingHint(true);
     try {
       const response = await requestContextualHint(
@@ -252,6 +253,21 @@ export default function SandboxPage() {
       setIsRequestingHint(false);
     }
   }, [taskId, code, currentStderr, requestContextualHint, trackHintDisplayed, isRequestingHint]);
+
+  // Demo mode: Trigger frustration to get a hint immediately
+  const handleTriggerFrustration = useCallback(async () => {
+    if (!taskId || isTriggeringFrustration) return;
+
+    setIsTriggeringFrustration(true);
+    try {
+      const response = await triggerFrustration(taskId, code, 'high');
+      if (response) {
+        trackHintDisplayed('demo');
+      }
+    } finally {
+      setIsTriggeringFrustration(false);
+    }
+  }, [taskId, code, triggerFrustration, trackHintDisplayed, isTriggeringFrustration]);
 
   // Show proctoring modal for proctored tasks
   if (isProctored && !proctoringSessionId) {
@@ -322,7 +338,17 @@ export default function SandboxPage() {
           />
         </div>
       ) : (
-        <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex justify-end gap-2">
+          {/* Demo Frustration Button */}
+          <button
+            onClick={handleTriggerFrustration}
+            disabled={isTriggeringFrustration}
+            className="w-9 h-9 text-lg font-bold bg-red-600/20 text-red-400 border border-red-600/30 rounded-lg hover:bg-red-600/40 hover:scale-110 disabled:opacity-50 transition-all flex items-center justify-center"
+            title="Demo: Trigger frustration signal (shows AI intervention)"
+          >
+            {isTriggeringFrustration ? '...' : '!'}
+          </button>
+
           <button
             onClick={handleRequestHint}
             disabled={isRequestingHint}
