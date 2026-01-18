@@ -15,6 +15,65 @@ interface SkillPassportProps {
   showAnalytics?: boolean;
 }
 
+interface IntegrityMetrics {
+  violations: number;
+  integrity_score: number;
+  violation_types?: string[];
+}
+
+function getIntegrityRating(score: number): { label: string; color: string; bgColor: string; borderColor: string } {
+  if (score >= 0.95) {
+    return { label: 'Excellent', color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/20', borderColor: 'border-green-200 dark:border-green-800' };
+  } else if (score >= 0.85) {
+    return { label: 'Good', color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/20', borderColor: 'border-blue-200 dark:border-blue-800' };
+  } else if (score >= 0.7) {
+    return { label: 'Acceptable', color: 'text-amber-600', bgColor: 'bg-amber-50 dark:bg-amber-900/20', borderColor: 'border-amber-200 dark:border-amber-800' };
+  } else {
+    return { label: 'Needs Review', color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20', borderColor: 'border-red-200 dark:border-red-800' };
+  }
+}
+
+function getViolationSummary(violations: number): string {
+  if (violations === 0) {
+    return 'No session anomalies detected.';
+  } else if (violations <= 2) {
+    return 'Minimal session anomalies detected. This may include minor events like accidental tab switches.';
+  } else if (violations <= 5) {
+    return 'Some session anomalies detected. Review recommended to distinguish between unintentional events and actual concerns.';
+  } else {
+    return 'Multiple session anomalies detected. Manual review suggested to assess the nature of these events.';
+  }
+}
+
+function IntegrityScoreDisplay({ metrics }: { metrics: IntegrityMetrics }) {
+  const rating = getIntegrityRating(metrics.integrity_score);
+  const summary = getViolationSummary(metrics.violations);
+
+  return (
+    <div className={`mt-4 p-4 ${rating.bgColor} border ${rating.borderColor} rounded-lg`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <svg className={`w-5 h-5 ${rating.color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span className={`font-medium ${rating.color}`}>
+            Session Integrity: {rating.label}
+          </span>
+        </div>
+        <span className={`text-sm font-semibold ${rating.color}`}>
+          {(metrics.integrity_score * 100).toFixed(0)}%
+        </span>
+      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-300">{summary}</p>
+      {metrics.violations > 0 && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
+          Note: Anomalies may include unintentional events such as accidental tab switches or brief focus loss. We recommend reviewing session context before drawing conclusions.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function SkillPassport({ passport, compact = false, showAnalytics = false }: SkillPassportProps) {
   // Fetch Engineering DNA radar profile
   const { radarProfile, radarSummary } = useRadar(passport.user_id, { enablePolling: false });
@@ -156,19 +215,8 @@ export function SkillPassport({ passport, compact = false, showAnalytics = false
             </div>
           </div>
           
-          {/* Integrity Warning */}
-          {analytics.integrity_metrics.violations > 0 && (
-            <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <div className="flex items-center gap-2 text-red-600">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span className="font-medium">
-                  {analytics.integrity_metrics.violations} proctoring violation{analytics.integrity_metrics.violations !== 1 ? 's' : ''} detected
-                </span>
-              </div>
-            </div>
-          )}
+          {/* Integrity Score */}
+          <IntegrityScoreDisplay metrics={analytics.integrity_metrics} />
         </div>
       )}
 

@@ -12,11 +12,12 @@ import { QuickInsights } from './QuickInsights';
 interface TimelineReplayProps {
   sessionId: string;
   onBack?: () => void;
+  hideVideo?: boolean;
 }
 
 type ActivePanel = 'details' | 'ask' | 'insights';
 
-export function TimelineReplay({ sessionId, onBack }: TimelineReplayProps) {
+export function TimelineReplay({ sessionId, onBack, hideVideo = false }: TimelineReplayProps) {
   const {
     timeline,
     insights,
@@ -263,8 +264,8 @@ export function TimelineReplay({ sessionId, onBack }: TimelineReplayProps) {
             </div>
           </div>
 
-          {/* Video player (if available) */}
-          {timeline.has_video && (
+          {/* Video player (if available and not hidden) */}
+          {timeline.has_video && !hideVideo && (
             <div className="mt-6">
               <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-4">
                 Interview Recording

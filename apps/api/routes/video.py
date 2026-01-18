@@ -6,7 +6,7 @@ import os
 
 from middleware.auth import get_current_user
 from db.collections import Collections
-from models.video import VideoUpload, VideoStatus, SearchResult, VideoHighlight
+from models.video import VideoUpload, VideoStatus, VideoDetails, SearchResult, VideoHighlight, InterviewHighlight, CommunicationAnalysis, CommunicationScore
 from services.twelvelabs import upload_video_to_twelvelabs, search_video
 
 router = APIRouter()
@@ -99,6 +99,67 @@ async def get_video_status(
         status=video["status"],
         duration_seconds=video.get("duration_seconds"),
         ready_at=video.get("ready_at"),
+    )
+
+
+@router.get("/{video_id}/details", response_model=VideoDetails)
+async def get_video_details(
+    video_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get full video details including TwelveLabs analysis results.
+
+    Returns summary, highlights, and communication analysis once video is ready.
+    """
+    video = await Collections.videos().find_one({"_id": video_id})
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found",
+        )
+
+    # Check ownership
+    if video["user_id"] != current_user["user_id"] and current_user["role"] != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this video",
+        )
+
+    # Parse highlights if they exist
+    highlights = None
+    if video.get("highlights"):
+        highlights = [
+            InterviewHighlight(
+                category=h.get("category", ""),
+                query=h.get("query", ""),
+                start=h.get("start", 0),
+                end=h.get("end", 0),
+                confidence=h.get("confidence", 0),
+                transcript=h.get("transcript"),
+            )
+            for h in video["highlights"]
+        ]
+
+    # Parse communication analysis if it exists
+    communication_analysis = None
+    if video.get("communication_analysis"):
+        ca = video["communication_analysis"]
+        communication_analysis = CommunicationAnalysis(
+            clarity=CommunicationScore(**ca["clarity"]) if ca.get("clarity") else None,
+            confidence=CommunicationScore(**ca["confidence"]) if ca.get("confidence") else None,
+            collaboration=CommunicationScore(**ca["collaboration"]) if ca.get("collaboration") else None,
+            technical_depth=CommunicationScore(**ca["technical_depth"]) if ca.get("technical_depth") else None,
+        )
+
+    return VideoDetails(
+        video_id=video_id,
+        status=video["status"],
+        duration_seconds=video.get("duration_seconds"),
+        ready_at=video.get("ready_at"),
+        summary=video.get("summary"),
+        highlights=highlights,
+        communication_analysis=communication_analysis,
     )
 
 

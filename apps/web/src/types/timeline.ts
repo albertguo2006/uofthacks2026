@@ -91,10 +91,49 @@ export interface SessionSummary {
   code_snapshots: number;
   has_video: boolean;
   video_id: string | null;
+  is_proctored: boolean;
+  final_code: string | null;
+  insights_summary: string | null;
 }
 
 export interface UserSessionsResponse {
   sessions: SessionSummary[];
+}
+
+export interface RecruiterVideoHighlight {
+  category: string;
+  query: string;
+  start: number;
+  end: number;
+  confidence: number;
+  transcript?: string;
+}
+
+export interface RecruiterVideoCommunicationScore {
+  score: number;
+  reason: string;
+}
+
+export interface RecruiterVideoCommunicationAnalysis {
+  clarity?: RecruiterVideoCommunicationScore;
+  confidence?: RecruiterVideoCommunicationScore;
+  collaboration?: RecruiterVideoCommunicationScore;
+  technical_depth?: RecruiterVideoCommunicationScore;
+}
+
+export interface RecruiterVideo {
+  video_id: string;
+  status: 'uploading' | 'indexing' | 'ready' | 'failed';
+  filename: string;
+  uploaded_at: string;
+  uploaded_by: string;
+  summary?: string;
+  highlights?: RecruiterVideoHighlight[];
+  communication_analysis?: RecruiterVideoCommunicationAnalysis;
+}
+
+export interface RecruiterVideosResponse {
+  videos: RecruiterVideo[];
 }
 
 // Helper type for timeline event filtering

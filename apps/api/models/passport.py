@@ -28,13 +28,29 @@ class NotableMoment(BaseModel):
 class InterviewHighlight(BaseModel):
     timestamp: str  # "02:34"
     description: str
-    query: str
+    query: Optional[str] = None
+    category: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class CommunicationScore(BaseModel):
+    score: int = 0
+    reason: str = ""
+
+
+class CommunicationAnalysis(BaseModel):
+    clarity: Optional[CommunicationScore] = None
+    confidence: Optional[CommunicationScore] = None
+    collaboration: Optional[CommunicationScore] = None
+    technical_depth: Optional[CommunicationScore] = None
 
 
 class InterviewInfo(BaseModel):
     has_video: bool = False
     video_id: Optional[str] = None
     highlights: list[InterviewHighlight] = []
+    summary: Optional[str] = None
+    communication_analysis: Optional[CommunicationAnalysis] = None
 
 
 class SkillPassport(BaseModel):

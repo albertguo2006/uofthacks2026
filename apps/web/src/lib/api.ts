@@ -1,4 +1,4 @@
-import type { Timeline, AskRequest, AskResponse, QuickInsightsResponse, UserSessionsResponse } from '@/types/timeline';
+import type { Timeline, AskRequest, AskResponse, QuickInsightsResponse, UserSessionsResponse, RecruiterVideosResponse } from '@/types/timeline';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -285,6 +285,112 @@ class ApiClient {
     }
     return this.get(`/replay/user/${userId}/sessions`);
   }
+
+  async getRecruiterVideos(candidateId: string): Promise<RecruiterVideosResponse> {
+    if (isDevMode()) {
+      return { videos: MOCK_RECRUITER_VIDEOS };
+    }
+    return this.get(`/recruiter/candidates/${candidateId}/videos`);
+  }
+
+  async uploadCandidateVideo(
+    candidateId: string,
+    formData: FormData,
+    onProgress?: (progress: number) => void
+  ): Promise<{ video_id: string; status: string; candidate_id: string }> {
+    const token = this.getToken();
+    const devMode = isDevMode();
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable && onProgress) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          onProgress(progress);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error('Upload failed'));
+        }
+      });
+
+      xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+
+      xhr.open('POST', `${API_URL}/recruiter/candidates/${candidateId}/video`);
+      if (devMode) {
+        xhr.setRequestHeader('X-Dev-Mode', 'true');
+        xhr.setRequestHeader('X-Dev-Role', 'recruiter');
+      } else if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      xhr.send(formData);
+    });
+  }
+
+  async getVideoStatus(videoId: string): Promise<{
+    video_id: string;
+    status: string;
+    duration_seconds?: number;
+    ready_at?: string;
+  }> {
+    return this.get(`/video/${videoId}/status`);
+  }
+
+  async getVideoDetails(videoId: string): Promise<VideoDetails> {
+    if (isDevMode()) {
+      // Find the video in mock data
+      const mockVideo = MOCK_RECRUITER_VIDEOS.find(v => v.video_id === videoId);
+      if (mockVideo) {
+        return {
+          video_id: mockVideo.video_id,
+          status: mockVideo.status,
+          summary: mockVideo.summary,
+          highlights: mockVideo.highlights,
+          communication_analysis: mockVideo.communication_analysis,
+        };
+      }
+      // Default mock
+      return MOCK_VIDEO_DETAILS;
+    }
+    return this.get(`/video/${videoId}/details`);
+  }
+}
+
+// Video types
+export interface CommunicationScore {
+  score: number;
+  reason: string;
+}
+
+export interface CommunicationAnalysis {
+  clarity?: CommunicationScore;
+  confidence?: CommunicationScore;
+  collaboration?: CommunicationScore;
+  technical_depth?: CommunicationScore;
+}
+
+export interface InterviewHighlight {
+  category: string;
+  query: string;
+  start: number;
+  end: number;
+  confidence: number;
+  transcript?: string;
+}
+
+export interface VideoDetails {
+  video_id: string;
+  status: string;
+  duration_seconds?: number;
+  ready_at?: string;
+  summary?: string;
+  highlights?: InterviewHighlight[];
+  communication_analysis?: CommunicationAnalysis;
 }
 
 // Analytics types
@@ -383,8 +489,18 @@ const MOCK_SESSIONS = [
     ended_at: new Date(Date.now() - 1800000).toISOString(),
     event_count: 45,
     code_snapshots: 12,
-    has_video: true,
-    video_id: 'video-001',
+    has_video: false,
+    video_id: null,
+    is_proctored: true,
+    final_code: `def two_sum(nums, target):
+    seen = {}
+    for i, num in enumerate(nums):
+        complement = target - num
+        if complement in seen:
+            return [seen[complement], i]
+        seen[num] = i
+    return []`,
+    insights_summary: 'The candidate demonstrated strong problem-solving skills, efficiently pivoting from a brute force approach to an optimized hash map solution after receiving a hint.',
   },
   {
     session_id: 'dev-session-002',
@@ -396,8 +512,103 @@ const MOCK_SESSIONS = [
     code_snapshots: 8,
     has_video: false,
     video_id: null,
+    is_proctored: true,
+    final_code: `def binary_search(arr, target):
+    left, right = 0, len(arr) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1`,
+    insights_summary: 'Session showed methodical approach with good debugging practices. Completed binary search implementation successfully.',
   },
 ];
+
+// Mock recruiter videos for dev mode
+const MOCK_RECRUITER_VIDEOS = [
+  {
+    video_id: 'video-001',
+    status: 'ready' as const,
+    filename: 'interview-2024-01-15.mp4',
+    uploaded_at: new Date(Date.now() - 86400000).toISOString(),
+    uploaded_by: 'recruiter-001',
+    summary: 'The candidate demonstrated excellent communication skills and technical depth during this system design discussion. They showed clear thinking about trade-offs and asked relevant clarifying questions.',
+    highlights: [
+      {
+        category: 'approach',
+        query: 'problem-solving approach',
+        start: 120,
+        end: 180,
+        confidence: 0.92,
+        transcript: 'I would start by understanding the requirements...',
+      },
+      {
+        category: 'tradeoffs',
+        query: 'discussing tradeoffs',
+        start: 450,
+        end: 520,
+        confidence: 0.88,
+        transcript: 'The main tradeoff here is between latency and consistency...',
+      },
+    ],
+    communication_analysis: {
+      clarity: { score: 4, reason: 'Explains concepts clearly with good examples' },
+      confidence: { score: 5, reason: 'Speaks confidently and handles uncertainty well' },
+      collaboration: { score: 4, reason: 'Asks good clarifying questions' },
+      technical_depth: { score: 4, reason: 'Uses appropriate technical terminology' },
+    },
+  },
+  {
+    video_id: 'video-002',
+    status: 'indexing' as const,
+    filename: 'behavioral-interview.mp4',
+    uploaded_at: new Date(Date.now() - 3600000).toISOString(),
+    uploaded_by: 'recruiter-001',
+  },
+];
+
+const MOCK_VIDEO_DETAILS: VideoDetails = {
+  video_id: 'video-001',
+  status: 'ready',
+  duration_seconds: 1800,
+  summary: 'The candidate demonstrated excellent communication skills and technical depth during this system design discussion. They showed clear thinking about trade-offs and asked relevant clarifying questions. Their approach to breaking down the problem was methodical, and they handled edge cases well.',
+  highlights: [
+    {
+      category: 'approach',
+      query: 'problem-solving approach',
+      start: 120,
+      end: 180,
+      confidence: 0.92,
+      transcript: 'I would start by understanding the requirements and breaking down the problem into smaller components...',
+    },
+    {
+      category: 'tradeoffs',
+      query: 'discussing tradeoffs',
+      start: 450,
+      end: 520,
+      confidence: 0.88,
+      transcript: 'The main tradeoff here is between latency and consistency. If we prioritize consistency...',
+    },
+    {
+      category: 'debugging',
+      query: 'debugging and fixing errors',
+      start: 780,
+      end: 850,
+      confidence: 0.85,
+      transcript: 'Let me trace through this logic again. I think the issue might be in how we handle the edge case...',
+    },
+  ],
+  communication_analysis: {
+    clarity: { score: 4, reason: 'Explains concepts clearly with good examples and analogies' },
+    confidence: { score: 5, reason: 'Speaks confidently and handles uncertainty well' },
+    collaboration: { score: 4, reason: 'Asks good clarifying questions and thinks out loud' },
+    technical_depth: { score: 4, reason: 'Uses appropriate technical terminology accurately' },
+  },
+};
 
 const MOCK_TIMELINE = {
   session_id: 'dev-session-001',

@@ -18,6 +18,7 @@ export default function SessionReplayPage() {
     <TimelineReplay
       sessionId={sessionId}
       onBack={handleBack}
+      hideVideo
     />
   );
 }

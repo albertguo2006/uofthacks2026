@@ -9,6 +9,8 @@ from models.passport import (
     NotableMoment,
     InterviewInfo,
     InterviewHighlight,
+    CommunicationAnalysis,
+    CommunicationScore,
 )
 
 router = APIRouter()
@@ -174,17 +176,42 @@ async def get_passport(user_id: str, request: Request, current_user: dict = Depe
     # Build interview info
     interview = InterviewInfo(has_video=False)
     if passport.get("interview_video_id"):
+        # Parse highlights from TwelveLabs format
+        highlights = []
+        for h in passport.get("interview_highlights", []):
+            # TwelveLabs stores: start, end, confidence, transcript, category, query
+            # Convert start time (seconds) to timestamp string
+            start_seconds = h.get("start", h.get("timestamp_start", 0))
+            if isinstance(start_seconds, (int, float)):
+                timestamp = f"{int(start_seconds // 60):02d}:{int(start_seconds % 60):02d}"
+            else:
+                timestamp = str(start_seconds)
+
+            highlights.append(InterviewHighlight(
+                timestamp=timestamp,
+                description=h.get("transcript", h.get("description", "")),
+                query=h.get("query", h.get("query_matched", "")),
+                category=h.get("category"),
+                confidence=h.get("confidence"),
+            ))
+
+        # Parse communication analysis
+        communication_analysis = None
+        comm_scores = passport.get("communication_scores", {})
+        if comm_scores:
+            communication_analysis = CommunicationAnalysis(
+                clarity=CommunicationScore(**comm_scores["clarity"]) if comm_scores.get("clarity") else None,
+                confidence=CommunicationScore(**comm_scores["confidence"]) if comm_scores.get("confidence") else None,
+                collaboration=CommunicationScore(**comm_scores["collaboration"]) if comm_scores.get("collaboration") else None,
+                technical_depth=CommunicationScore(**comm_scores["technical_depth"]) if comm_scores.get("technical_depth") else None,
+            )
+
         interview = InterviewInfo(
             has_video=True,
             video_id=passport.get("interview_video_id"),
-            highlights=[
-                InterviewHighlight(
-                    timestamp=f"{int(h['timestamp_start'] // 60):02d}:{int(h['timestamp_start'] % 60):02d}",
-                    description=h.get("description", ""),
-                    query=h.get("query_matched", ""),
-                )
-                for h in passport.get("interview_highlights", [])
-            ],
+            highlights=highlights,
+            summary=passport.get("interview_summary"),
+            communication_analysis=communication_analysis,
         )
 
     return SkillPassport(

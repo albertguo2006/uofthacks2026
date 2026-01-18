@@ -27,6 +27,38 @@ class SearchResult(BaseModel):
     results: list[VideoHighlight]
 
 
+class CommunicationScore(BaseModel):
+    score: int
+    reason: str
+
+
+class CommunicationAnalysis(BaseModel):
+    clarity: Optional[CommunicationScore] = None
+    confidence: Optional[CommunicationScore] = None
+    collaboration: Optional[CommunicationScore] = None
+    technical_depth: Optional[CommunicationScore] = None
+
+
+class InterviewHighlight(BaseModel):
+    category: str
+    query: str
+    start: float
+    end: float
+    confidence: float
+    transcript: Optional[str] = None
+
+
+class VideoDetails(BaseModel):
+    """Full video details including TwelveLabs analysis results."""
+    video_id: str
+    status: str
+    duration_seconds: Optional[int] = None
+    ready_at: Optional[datetime] = None
+    summary: Optional[str] = None
+    highlights: Optional[list[InterviewHighlight]] = None
+    communication_analysis: Optional[CommunicationAnalysis] = None
+
+
 class VideoInDB(BaseModel):
     id: str = Field(alias="_id")
     user_id: str
