@@ -2,7 +2,8 @@ import numpy as np
 from datetime import datetime
 from typing import Optional
 from db.collections import Collections
-from services.amplitude import update_amplitude_user_properties
+from services.amplitude import update_amplitude_user_properties, get_passport_analytics, get_amplitude_ai_profile
+from services.backboard import BackboardService
 
 
 def compute_job_fit(user_vector: list[float], job_vector: list[float]) -> float:
@@ -298,8 +299,23 @@ async def get_metrics_breakdown(user_id: str) -> dict:
     }
 
 
-async def assign_archetype(skill_vector: list[float]) -> tuple[str, float]:
-    """Assign archetype based on skill vector using simple rules (or ML)."""
+async def assign_archetype(skill_vector: list[float], user_id: str = None) -> tuple[str, float]:
+    """
+    Assign archetype using a multi-AI hybrid approach:
+    
+    AI Models Used:
+    1. Amplitude AI (primary if available): ML-computed cohorts & behavioral signals
+    2. Backboard GPT-4/ChatGPT (secondary): AI-driven behavioral analysis
+    3. Mathematical fallback: Skill vector + local analytics
+    
+    Weighting Strategy:
+    - Base mathematical scores: 30%
+    - Local analytics adjustments: 20%
+    - Amplitude AI insights: 25% (when available)
+    - Backboard GPT-4 insights: 25% (when available)
+    
+    If no AI data is available, mathematical + local analytics are weighted higher.
+    """
     if not skill_vector or len(skill_vector) < 5:
         return None, 0.0
 
@@ -309,8 +325,8 @@ async def assign_archetype(skill_vector: list[float]) -> tuple[str, float]:
     tool_fluency = skill_vector[3]
     integrity = skill_vector[4]
 
-    # Simple rule-based assignment (could be replaced with KMeans)
-    archetypes_scores = {
+    # Base scores from skill vector (weight: 40%)
+    base_scores = {
         "fast_iterator": iteration_velocity * 0.5 + tool_fluency * 0.3 + debug_efficiency * 0.2,
         "careful_tester": craftsmanship * 0.4 + debug_efficiency * 0.4 + integrity * 0.2,
         "debugger": debug_efficiency * 0.5 + iteration_velocity * 0.3 + tool_fluency * 0.2,
@@ -318,8 +334,292 @@ async def assign_archetype(skill_vector: list[float]) -> tuple[str, float]:
         "explorer": iteration_velocity * 0.4 + debug_efficiency * 0.3 + craftsmanship * 0.3,
     }
 
-    best_archetype = max(archetypes_scores, key=archetypes_scores.get)
-    confidence = archetypes_scores[best_archetype]
+    # Local analytics adjustments (weight: 30%)
+    local_adjustments = {
+        "fast_iterator": 0.0,
+        "careful_tester": 0.0,
+        "debugger": 0.0,
+        "craftsman": 0.0,
+        "explorer": 0.0,
+    }
+    
+    # Amplitude AI adjustments from ML-computed insights (weight: 30%)
+    ai_adjustments = {
+        "fast_iterator": 0.0,
+        "careful_tester": 0.0,
+        "debugger": 0.0,
+        "craftsman": 0.0,
+        "explorer": 0.0,
+    }
+
+    if user_id:
+        # Fetch both local analytics and Amplitude AI profile in parallel
+        try:
+            import asyncio
+            analytics_task = get_passport_analytics(user_id)
+            ai_profile_task = get_amplitude_ai_profile(user_id)
+            
+            analytics, ai_profile = await asyncio.gather(
+                analytics_task, 
+                ai_profile_task,
+                return_exceptions=True
+            )
+            
+            # Process local analytics
+            if isinstance(analytics, dict) and "error" not in analytics:
+                session_stats = analytics.get("session_stats", {})
+                activity = analytics.get("activity_metrics", {})
+                ai_metrics = analytics.get("ai_assistance_metrics", {})
+                learning = analytics.get("learning_metrics", {})
+                integrity_data = analytics.get("integrity_metrics", {})
+                
+                pass_rate = session_stats.get("pass_rate", 0)
+                avg_score = session_stats.get("average_score", 0) / 100
+                runs_per_submission = activity.get("runs_per_submission", 0)
+                ai_reliance = ai_metrics.get("ai_reliance_score", 0)
+                fix_efficiency = learning.get("fix_efficiency", 0)
+                integrity_score = integrity_data.get("integrity_score", 1.0)
+                
+                # Fast Iterator signals
+                if runs_per_submission > 5:
+                    local_adjustments["fast_iterator"] += 0.15
+                if runs_per_submission > 10:
+                    local_adjustments["fast_iterator"] += 0.10
+                if ai_reliance < 0.1:
+                    local_adjustments["fast_iterator"] += 0.05
+                
+                # Careful Tester signals
+                if pass_rate > 0.8:
+                    local_adjustments["careful_tester"] += 0.15
+                if avg_score > 0.85:
+                    local_adjustments["careful_tester"] += 0.10
+                if integrity_score > 0.95:
+                    local_adjustments["careful_tester"] += 0.05
+                
+                # Debugger signalsok
+                errors = learning.get("errors_encountered", 0)
+                if fix_efficiency > 0.7 and errors > 5:
+                    local_adjustments["debugger"] += 0.20
+                elif fix_efficiency > 0.5:
+                    local_adjustments["debugger"] += 0.10
+                
+                # Craftsman signals
+                if ai_reliance < 0.05 and integrity_score > 0.9:
+                    local_adjustments["craftsman"] += 0.15
+                if avg_score > 0.9 and pass_rate > 0.7:
+                    local_adjustments["craftsman"] += 0.10
+                
+                # Explorer signals
+                hints_requested = ai_metrics.get("hints_requested", 0)
+                hints_acked = ai_metrics.get("hints_acknowledged", 0)
+                if hints_requested > 0 and hints_acked / max(hints_requested, 1) > 0.5:
+                    local_adjustments["explorer"] += 0.10
+                if 3 < runs_per_submission < 8:
+                    local_adjustments["explorer"] += 0.10
+                    
+                print(f"[SkillGraph] Local analytics adjustments: {local_adjustments}")
+            
+            # Process Amplitude AI profile (ML-computed insights)
+            if isinstance(ai_profile, dict) and ai_profile.get("has_ai_data"):
+                print(f"[SkillGraph] ✓ Received Amplitude AI data for {user_id[:8]}...")
+                
+                # Get cohort-based archetype hints (from Amplitude's ML segmentation)
+                archetype_hints = ai_profile.get("archetype_hints", {})
+                for archetype, boost in archetype_hints.items():
+                    if archetype in ai_adjustments:
+                        ai_adjustments[archetype] += boost
+                
+                # Get behavioral signals from Amplitude's computations
+                signals = ai_profile.get("behavioral_signals", {})
+                
+                # Engagement score affects Fast Iterator & Explorer
+                engagement = signals.get("engagement_score")
+                if engagement is not None:
+                    if engagement > 0.8:
+                        ai_adjustments["fast_iterator"] += 0.15
+                        ai_adjustments["explorer"] += 0.10
+                    elif engagement > 0.5:
+                        ai_adjustments["explorer"] += 0.15
+                
+                # Power user score affects Fast Iterator & Craftsman
+                power_user = signals.get("power_user_score")
+                if power_user is not None:
+                    if power_user > 0.7:
+                        ai_adjustments["fast_iterator"] += 0.10
+                        ai_adjustments["craftsman"] += 0.10
+                
+                # Churn risk inversely affects Careful Tester
+                churn_risk = signals.get("churn_risk")
+                if churn_risk is not None:
+                    if churn_risk < 0.2:  # Low churn = high engagement
+                        ai_adjustments["careful_tester"] += 0.10
+                        ai_adjustments["craftsman"] += 0.05
+                
+                # User segment from Amplitude's ML
+                user_segment = signals.get("user_segment")
+                if user_segment:
+                    segment_lower = str(user_segment).lower()
+                    if "power" in segment_lower or "advanced" in segment_lower:
+                        ai_adjustments["craftsman"] += 0.15
+                    elif "beginner" in segment_lower or "new" in segment_lower:
+                        ai_adjustments["explorer"] += 0.15
+                    elif "consistent" in segment_lower or "regular" in segment_lower:
+                        ai_adjustments["careful_tester"] += 0.10
+                
+                # Skill level from Amplitude's computations
+                skill_level = signals.get("skill_level")
+                if skill_level:
+                    level_lower = str(skill_level).lower()
+                    if "expert" in level_lower or "advanced" in level_lower:
+                        ai_adjustments["craftsman"] += 0.20
+                        ai_adjustments["debugger"] += 0.10
+                    elif "intermediate" in level_lower:
+                        ai_adjustments["careful_tester"] += 0.10
+                
+                # Cohort count as a proxy for behavioral diversity
+                cohort_count = ai_profile.get("cohort_count", 0)
+                if cohort_count > 5:
+                    ai_adjustments["explorer"] += 0.10  # In many cohorts = diverse behavior
+                
+                print(f"[SkillGraph] Amplitude AI adjustments: {ai_adjustments}")
+            else:
+                print(f"[SkillGraph] No Amplitude AI data available, using local analytics only")
+                
+        except Exception as e:
+            print(f"[SkillGraph] Failed to fetch analytics: {e}, using base scores only")
+
+    # =========================================================================
+    # BACKBOARD GPT-4 AI - Secondary/Backup AI for archetype assignment
+    # =========================================================================
+    backboard_adjustments = {
+        "fast_iterator": 0.0,
+        "careful_tester": 0.0,
+        "debugger": 0.0,
+        "craftsman": 0.0,
+        "explorer": 0.0,
+    }
+    has_backboard_ai = False
+    
+    if user_id:
+        try:
+            # Prepare behavioral history for GPT-4 analysis
+            behavioral_history = {
+                "session_stats": {},
+                "activity_metrics": {},
+                "ai_assistance_metrics": {},
+                "learning_metrics": {},
+                "integrity_metrics": {},
+            }
+            
+            # Get analytics data if available
+            analytics = await get_passport_analytics(user_id)
+            if isinstance(analytics, dict) and "error" not in analytics:
+                behavioral_history = {
+                    "session_stats": analytics.get("session_stats", {}),
+                    "activity_metrics": analytics.get("activity_metrics", {}),
+                    "ai_assistance_metrics": analytics.get("ai_assistance_metrics", {}),
+                    "learning_metrics": analytics.get("learning_metrics", {}),
+                    "integrity_metrics": analytics.get("integrity_metrics", {}),
+                }
+            
+            # Call Backboard GPT-4 for AI-driven archetype assignment
+            backboard_service = BackboardService(user_id=user_id)
+            gpt4_result = await backboard_service.ai_assign_archetype(
+                skill_vector=skill_vector,
+                behavioral_history=behavioral_history,
+                analytics_summary={
+                    "skill_vector_summary": {
+                        "iteration_velocity": iteration_velocity,
+                        "debug_efficiency": debug_efficiency,
+                        "craftsmanship": craftsmanship,
+                        "tool_fluency": tool_fluency,
+                        "integrity": integrity,
+                    },
+                    "amplitude_ai_available": any(v > 0 for v in ai_adjustments.values()),
+                },
+            )
+            
+            if gpt4_result.get("ai_source") == "backboard":
+                has_backboard_ai = True
+                
+                # Use the adjustments from GPT-4
+                for archetype, score in gpt4_result.get("adjustments", {}).items():
+                    if archetype in backboard_adjustments:
+                        backboard_adjustments[archetype] = score
+                
+                print(f"[SkillGraph] ✓ Backboard GPT-4 AI assigned: {gpt4_result.get('archetype')} "
+                      f"(confidence: {gpt4_result.get('confidence', 0):.2f})")
+                print(f"[SkillGraph] Backboard AI adjustments: {backboard_adjustments}")
+            else:
+                print(f"[SkillGraph] Backboard AI fallback used (no GPT-4 response)")
+                
+        except Exception as e:
+            print(f"[SkillGraph] Backboard GPT-4 AI failed: {e}")
+
+    # =========================================================================
+    # COMBINE ALL AI SIGNALS WITH DYNAMIC WEIGHTING
+    # =========================================================================
+    
+    # Determine which AI sources are available
+    has_amplitude_ai = any(v > 0 for v in ai_adjustments.values())
+    has_local_analytics = any(v > 0 for v in local_adjustments.values())
+    
+    # Dynamic weighting based on available AI sources:
+    # - Both AIs available: math=25%, local=15%, amplitude=30%, backboard=30%
+    # - Only Amplitude AI: math=30%, local=25%, amplitude=45%
+    # - Only Backboard AI: math=30%, local=25%, backboard=45%
+    # - No AI: math=50%, local=50%
+    
+    if has_amplitude_ai and has_backboard_ai:
+        weights = {"base": 0.25, "local": 0.15, "amplitude": 0.30, "backboard": 0.30}
+        print(f"[SkillGraph] Using FULL AI mode (Amplitude + Backboard GPT-4)")
+    elif has_amplitude_ai:
+        weights = {"base": 0.30, "local": 0.25, "amplitude": 0.45, "backboard": 0.0}
+        print(f"[SkillGraph] Using Amplitude AI mode only")
+    elif has_backboard_ai:
+        weights = {"base": 0.30, "local": 0.25, "amplitude": 0.0, "backboard": 0.45}
+        print(f"[SkillGraph] Using Backboard GPT-4 AI mode only")
+    else:
+        weights = {"base": 0.50, "local": 0.50, "amplitude": 0.0, "backboard": 0.0}
+        print(f"[SkillGraph] Using MATHEMATICAL mode (no AI available)")
+
+    final_scores = {}
+    for archetype in base_scores:
+        base = base_scores[archetype]
+        local = local_adjustments[archetype]
+        amplitude = ai_adjustments[archetype]
+        backboard = backboard_adjustments[archetype]
+        
+        final_scores[archetype] = (
+            base * weights["base"] +
+            local * weights["local"] +
+            amplitude * weights["amplitude"] +
+            backboard * weights["backboard"]
+        )
+        
+        # Synergy bonus when multiple AI sources agree
+        if has_amplitude_ai and has_backboard_ai:
+            if amplitude > 0.1 and backboard > 0.1:
+                final_scores[archetype] += 0.05  # Agreement bonus
+
+    best_archetype = max(final_scores, key=final_scores.get)
+    confidence = min(final_scores[best_archetype], 1.0)  # Cap at 1.0
+    
+    # Log the AI sources used
+    ai_sources_used = []
+    if has_amplitude_ai:
+        ai_sources_used.append("Amplitude ML")
+    if has_backboard_ai:
+        ai_sources_used.append("Backboard GPT-4")
+    if not ai_sources_used:
+        ai_sources_used.append("Mathematical only")
+    
+    print(f"[SkillGraph] ========================================")
+    print(f"[SkillGraph] FINAL ARCHETYPE: {best_archetype.upper()}")
+    print(f"[SkillGraph] Confidence: {confidence:.3f}")
+    print(f"[SkillGraph] AI Sources: {', '.join(ai_sources_used)}")
+    print(f"[SkillGraph] All scores: {final_scores}")
+    print(f"[SkillGraph] ========================================")
 
     return best_archetype, round(confidence, 3)
 
@@ -338,8 +638,8 @@ async def update_passport_after_submit(
     # Compute new skill vector
     skill_vector = await compute_skill_vector(user_id)
 
-    # Assign archetype
-    archetype, confidence = await assign_archetype(skill_vector)
+    # Assign archetype (uses Amplitude analytics for smarter assignment)
+    archetype, confidence = await assign_archetype(skill_vector, user_id)
 
     # Build metrics
     metrics = {

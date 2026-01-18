@@ -3,10 +3,21 @@ Backboard.io Multi-Model AI Service + Direct Gemini API
 
 Using the backboard-sdk for proper API integration.
 
-Model routing:
-- Claude for empathetic hints (via Backboard - anthropic/claude-3-haiku)
-- GPT-4o for code analysis (via Backboard - openai/gpt-4o-mini)
-- Gemini for profile summaries & chat (DIRECT Gemini API - gemini-2.0-flash)
+Model routing (Two AI Models for hints + archetype):
+- Claude (anthropic/claude-3-5-sonnet) for empathetic hints [PRIMARY for hints]
+  - generate_hint, generate_personalized_hint, generate_targeted_hint
+  - generate_encouragement
+  - Fallback: Gemini API
+  
+- GPT-4 (openai/gpt-4o) for behavioral analysis [PRIMARY for archetypes]
+  - ai_assign_archetype - AI-driven archetype assignment
+  - analyze_code_error - Technical code analysis
+  - parse_job_requirements - Job description parsing
+  
+- Gemini (direct API - gemini-2.5-flash) for:
+  - Profile summaries & chat
+  - Fallback when Backboard is unavailable
+  
 - Cohere for job parsing (via Backboard - cohere/command-r)
 """
 
@@ -327,15 +338,18 @@ class BackboardService:
         print(f"{DIM}[Memory] Cleared memory for key: {memory_key}{RESET}")
 
     # =========================================================================
-    # HINT GENERATION - Claude (empathetic, pedagogical)
+    # HINT GENERATION - Claude (empathetic, pedagogical) with Gemini fallback
     # =========================================================================
 
     async def generate_hint(self, code: str, error: str, attempt_count: int) -> str:
         """
         Use Claude for empathetic, pedagogical hints.
+        Primary: Claude (via Backboard) - Best for empathetic, nuanced responses
+        Fallback: Gemini (direct API) - Fast and reliable backup
+        
         Memory: Remembers past hints to avoid repetition.
         """
-        print(f"\n{CYAN}[Hint] Generating basic hint (attempt #{attempt_count}){RESET}")
+        print(f"\n{CYAN}[Hint] Generating hint with CLAUDE (attempt #{attempt_count}){RESET}")
 
         system_prompt = """You are an encouraging coding mentor helping a student who is stuck.
 
@@ -359,27 +373,31 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             assistant_name="HintAssistant",
             system_prompt=system_prompt,
             user_message=user_message,
-            llm_provider="openai",
-            model_name="gpt-4o",
+            llm_provider="anthropic",
+            model_name="claude-3-5-sonnet-20241022",  # Claude for empathetic hints
             thread_key=f"hints:{self.user_id}",
             use_memory=True,
         )
 
     async def generate_encouragement(self, context: str) -> str:
-        """Generate pure encouragement when user seems frustrated."""
+        """
+        Generate pure encouragement when user seems frustrated.
+        Uses Claude for empathetic, genuine encouragement.
+        """
         system_prompt = "You are a supportive coding mentor. Give a brief (1 sentence) word of encouragement. Be genuine, not cheesy."
 
         return await self._call_model(
             assistant_name="EncouragementAssistant",
             system_prompt=system_prompt,
             user_message=f"Context: {context}",
-            llm_provider="openai",
-            model_name="gpt-4o",
+            llm_provider="anthropic",
+            model_name="claude-3-5-sonnet-20241022",  # Claude for empathetic responses
             thread_key=f"encouragement:{self.user_id}",
         )
 
     # =========================================================================
     # PERSONALIZED HINTS - Based on error profile (Adaptive Hints Feature)
+    # Uses Claude for empathetic, personalized hints with Gemini fallback
     # =========================================================================
 
     async def generate_personalized_hint(
@@ -391,9 +409,11 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
     ) -> dict:
         """
         Generate a personalized hint based on user's error profile.
+        Primary: Claude (via Backboard) - Best for personalized, empathetic responses
+        Fallback: Gemini (direct API) - Fast and reliable backup
         """
         dominant_category = error_profile.get("dominant_category", "logic")
-        print(f"\n{MAGENTA}[Hint] Generating PERSONALIZED hint (attempt #{attempt_count}, profile: {dominant_category}){RESET}")
+        print(f"\n{MAGENTA}[Hint] Generating PERSONALIZED hint with CLAUDE (attempt #{attempt_count}, profile: {dominant_category}){RESET}")
         effective_styles = error_profile.get("effective_hint_styles", ["conceptual"])
         hint_style = effective_styles[0] if effective_styles else "conceptual"
 
@@ -413,8 +433,8 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             assistant_name=f"PersonalizedHintAssistant_{dominant_category}",
             system_prompt=system_prompt,
             user_message=user_message,
-            llm_provider="openai",
-            model_name="gpt-4o",
+            llm_provider="anthropic",
+            model_name="claude-3-5-sonnet-20241022",  # Claude for personalized hints
             thread_key=f"personalized_hints:{self.user_id}",
             use_memory=True,
         )
@@ -599,6 +619,170 @@ Write a 2-sentence personalized description of their engineering style that refl
             temperature=0.7,
             max_tokens=100,
         )
+
+    # =========================================================================
+    # AI-POWERED ARCHETYPE ASSIGNMENT - GPT-4/ChatGPT (behavioral analysis)
+    # =========================================================================
+
+    async def ai_assign_archetype(
+        self,
+        skill_vector: list[float],
+        behavioral_history: dict,
+        analytics_summary: dict = None,
+    ) -> dict:
+        """
+        Use GPT-4/ChatGPT for AI-driven archetype assignment based on behavioral analysis.
+        
+        This is used as a backup/secondary AI model when Amplitude AI data is unavailable,
+        or as a complementary signal to enhance archetype assignment accuracy.
+        
+        Args:
+            skill_vector: The 5-dimension skill vector [iteration_velocity, debug_efficiency, 
+                         craftsmanship, tool_fluency, integrity]
+            behavioral_history: Dictionary containing user's behavioral data from sessions
+            analytics_summary: Optional summary from local analytics
+        
+        Returns:
+            dict with:
+                - archetype: The AI-suggested archetype
+                - confidence: Confidence score (0-1)
+                - reasoning: Brief explanation of why this archetype was assigned
+                - adjustments: Score adjustments for each archetype
+        """
+        print(f"\n{MAGENTA}[AI Archetype] Using GPT-4/ChatGPT for behavioral analysis...{RESET}")
+        
+        # Prepare behavioral context for the AI
+        skill_labels = ["iteration_velocity", "debug_efficiency", "craftsmanship", "tool_fluency", "integrity"]
+        skill_dict = {skill_labels[i]: skill_vector[i] for i in range(min(len(skill_vector), 5))}
+        
+        system_prompt = """You are an expert at analyzing developer behavior patterns and assigning developer archetypes.
+
+Based on the provided skill vector and behavioral history, assign one of these archetypes:
+- "fast_iterator": Developers who iterate quickly, run tests frequently, and move fast
+- "careful_tester": Developers who are methodical, have high pass rates, and focus on correctness
+- "debugger": Developers who excel at fixing errors and have strong debugging skills
+- "craftsman": Developers who write clean code independently with minimal AI assistance
+- "explorer": Developers who try different approaches and use hints constructively
+
+Analyze the behavioral patterns holistically. Consider:
+1. The skill vector scores (0-1 scale)
+2. Session statistics (pass rate, average score)
+3. Activity patterns (runs per submission, code changes)
+4. AI assistance usage (hints requested, chat help)
+5. Integrity metrics (violations, paste bursts)
+6. Learning patterns (fix efficiency, error recovery)
+
+Return ONLY valid JSON in this exact format:
+{
+  "archetype": "archetype_name",
+  "confidence": 0.X,
+  "reasoning": "Brief 1-2 sentence explanation",
+  "adjustments": {
+    "fast_iterator": 0.X,
+    "careful_tester": 0.X,
+    "debugger": 0.X,
+    "craftsman": 0.X,
+    "explorer": 0.X
+  }
+}"""
+
+        user_message = f"""Analyze this developer's behavior and assign an archetype:
+
+SKILL VECTOR (0-1 scale):
+{json.dumps(skill_dict, indent=2)}
+
+BEHAVIORAL HISTORY:
+{json.dumps(behavioral_history, indent=2, default=str)}
+
+ANALYTICS SUMMARY:
+{json.dumps(analytics_summary or {}, indent=2, default=str)}
+
+Provide your archetype assignment with confidence and reasoning."""
+
+        try:
+            response = await self._call_model(
+                assistant_name="ArchetypeAssignmentAssistant",
+                system_prompt=system_prompt,
+                user_message=user_message,
+                llm_provider="openai",
+                model_name="gpt-4o",  # Using GPT-4o for best reasoning
+                thread_key=f"archetype:{self.user_id}",
+                use_memory=False,  # Fresh analysis each time
+            )
+            
+            result = json.loads(self._strip_markdown_json(response))
+            
+            # Validate the response
+            valid_archetypes = ["fast_iterator", "careful_tester", "debugger", "craftsman", "explorer"]
+            if result.get("archetype") not in valid_archetypes:
+                raise ValueError(f"Invalid archetype: {result.get('archetype')}")
+            
+            result["confidence"] = min(1.0, max(0.0, float(result.get("confidence", 0.5))))
+            
+            # Ensure adjustments exist and are valid
+            if "adjustments" not in result:
+                result["adjustments"] = {}
+            for arch in valid_archetypes:
+                if arch not in result["adjustments"]:
+                    result["adjustments"][arch] = 0.0
+                result["adjustments"][arch] = min(1.0, max(0.0, float(result["adjustments"][arch])))
+            
+            result["model_used"] = "gpt-4o"
+            result["ai_source"] = "backboard"
+            
+            print(f"{GREEN}[AI Archetype] ✓ GPT-4 assigned: {result['archetype']} (confidence: {result['confidence']:.2f}){RESET}")
+            print(f"{DIM}[AI Archetype] Reasoning: {result.get('reasoning', 'N/A')}{RESET}")
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            print(f"{RED}[AI Archetype] ✗ Failed to parse GPT-4 response: {e}{RESET}")
+            return self._fallback_archetype_assignment(skill_vector)
+        except Exception as e:
+            print(f"{RED}[AI Archetype] ✗ GPT-4 archetype assignment failed: {e}{RESET}")
+            return self._fallback_archetype_assignment(skill_vector)
+    
+    def _fallback_archetype_assignment(self, skill_vector: list[float]) -> dict:
+        """
+        Fallback to mathematical archetype assignment when AI is unavailable.
+        """
+        print(f"{YELLOW}[AI Archetype] Using mathematical fallback{RESET}")
+        
+        if not skill_vector or len(skill_vector) < 5:
+            return {
+                "archetype": "explorer",
+                "confidence": 0.3,
+                "reasoning": "Insufficient data for analysis",
+                "adjustments": {},
+                "model_used": "fallback",
+                "ai_source": "none",
+            }
+        
+        iteration_velocity = skill_vector[0]
+        debug_efficiency = skill_vector[1]
+        craftsmanship = skill_vector[2]
+        tool_fluency = skill_vector[3]
+        integrity = skill_vector[4]
+        
+        scores = {
+            "fast_iterator": iteration_velocity * 0.5 + tool_fluency * 0.3 + debug_efficiency * 0.2,
+            "careful_tester": craftsmanship * 0.4 + debug_efficiency * 0.4 + integrity * 0.2,
+            "debugger": debug_efficiency * 0.5 + iteration_velocity * 0.3 + tool_fluency * 0.2,
+            "craftsman": craftsmanship * 0.5 + integrity * 0.3 + debug_efficiency * 0.2,
+            "explorer": iteration_velocity * 0.4 + debug_efficiency * 0.3 + craftsmanship * 0.3,
+        }
+        
+        best_archetype = max(scores, key=scores.get)
+        confidence = min(scores[best_archetype], 1.0)
+        
+        return {
+            "archetype": best_archetype,
+            "confidence": round(confidence, 3),
+            "reasoning": "Assigned based on mathematical skill vector analysis",
+            "adjustments": scores,
+            "model_used": "fallback",
+            "ai_source": "none",
+        }
 
     # =========================================================================
     # JOB PARSING - Cohere Command (efficient extraction)
@@ -877,8 +1061,10 @@ Explain in 1-2 sentences why this candidate does/doesn't match this role. Be spe
     ) -> dict:
         """
         Generate a targeted hint based on specific intervention reasons.
+        Primary: Claude (via Backboard) - Best for nuanced, context-aware hints
+        Fallback: Gemini (direct API) - Fast and reliable backup
         """
-        print(f"\n{MAGENTA}[Hint] Generating TARGETED hint (type: {hint_type}, attempt #{attempt_count}){RESET}")
+        print(f"\n{MAGENTA}[Hint] Generating TARGETED hint with CLAUDE (type: {hint_type}, attempt #{attempt_count}){RESET}")
 
         # Build system prompt based on hint type
         if hint_type == "different_approach":
@@ -951,8 +1137,8 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             assistant_name=f"TargetedHintAssistant_{hint_type}",
             system_prompt=system_prompt,
             user_message=user_message,
-            llm_provider="openai",
-            model_name="gpt-4o",
+            llm_provider="anthropic",
+            model_name="claude-3-5-sonnet-20241022",  # Claude for targeted hints
             thread_key=f"targeted_hints:{self.user_id}:{hint_type}",
             use_memory=True,
         )

@@ -290,3 +290,178 @@ async def get_passport_analytics(user_id: str) -> dict:
             "integrity_score": max(0, 1.0 - (violations * 0.1)),  # -10% per violation
         },
     }
+
+
+async def get_amplitude_ai_profile(user_id: str) -> dict:
+    """
+    Fetch AI-computed user profile from Amplitude's User Profile API.
+    
+    This returns ML-derived insights including:
+    - Computations: ML-derived user properties (e.g., engagement scores)
+    - Cohort IDs: Behavioral cohorts the user belongs to
+    - Predictions: ML prediction propensity scores
+    - User Properties: Amplitude-tracked properties
+    
+    These are computed by Amplitude's ML models, not just raw event counts.
+    """
+    settings = get_settings()
+    
+    if not settings.amplitude_secret_key:
+        print(f"{YELLOW}[Amplitude AI] Skipped - Secret key not configured{RESET}")
+        return {"error": "Amplitude secret key not configured"}
+    
+    print(f"{BLUE}[Amplitude AI] Fetching AI profile for user {user_id[:8]}...{RESET}")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Fetch full user profile with computations, cohorts, and properties
+            response = await client.get(
+                "https://profile-api.amplitude.com/v1/userprofile",
+                params={
+                    "user_id": user_id,
+                    "get_amp_props": "true",      # User properties
+                    "get_cohort_ids": "true",     # Behavioral cohort memberships
+                    "get_computations": "true",   # ML-computed properties
+                },
+                headers={
+                    "Authorization": f"Api-Key {settings.amplitude_secret_key}"
+                },
+                timeout=15.0,
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                user_data = data.get("userData", {})
+                
+                print(f"{GREEN}[Amplitude AI] ✓ Fetched AI profile successfully{RESET}")
+                
+                # Extract and structure the AI-derived insights
+                amp_props = user_data.get("amp_props") or {}
+                cohort_ids = user_data.get("cohort_ids") or []
+                computations = user_data.get("computations") or {}
+                
+                # Parse any computed properties that might indicate user type
+                ai_insights = {
+                    "user_id": user_id,
+                    "has_ai_data": bool(amp_props or cohort_ids or computations),
+                    
+                    # Amplitude-tracked properties
+                    "properties": amp_props,
+                    
+                    # Behavioral cohorts (ML-segmented)
+                    "cohorts": cohort_ids,
+                    "cohort_count": len(cohort_ids),
+                    
+                    # ML-computed properties
+                    "computations": computations,
+                    
+                    # Derived behavioral signals from Amplitude's tracking
+                    "behavioral_signals": {
+                        "first_seen": amp_props.get("first_used"),
+                        "last_seen": amp_props.get("last_used"),
+                        "library": amp_props.get("library"),
+                        # Extract any custom computed properties
+                        "engagement_score": _safe_float(computations.get("engagement_score")),
+                        "skill_level": computations.get("skill_level"),
+                        "user_segment": computations.get("user_segment"),
+                        "churn_risk": _safe_float(computations.get("churn_risk")),
+                        "power_user_score": _safe_float(computations.get("power_user_score")),
+                    },
+                    
+                    # Cohort-based archetype hints (if you set up cohorts in Amplitude)
+                    "archetype_hints": _extract_archetype_hints(cohort_ids),
+                }
+                
+                return ai_insights
+                
+            elif response.status_code == 401:
+                print(f"{RED}[Amplitude AI] ✗ Authentication failed - check secret key{RESET}")
+                return {"error": "Authentication failed", "status": 401}
+            else:
+                print(f"{RED}[Amplitude AI] ✗ Failed - HTTP {response.status_code}: {response.text[:100]}{RESET}")
+                return {"error": f"HTTP {response.status_code}", "status": response.status_code}
+                
+    except Exception as e:
+        print(f"{RED}[Amplitude AI] ✗ Error fetching AI profile: {e}{RESET}")
+        return {"error": str(e)}
+
+
+def _safe_float(value) -> float | None:
+    """Safely convert a value to float."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_archetype_hints(cohort_ids: list[str]) -> dict:
+    """
+    Extract archetype hints from cohort memberships.
+    
+    If you create cohorts in Amplitude like:
+    - "fast_iterators" - users with high run frequency
+    - "debuggers" - users with high error fix rates
+    - "craftsmen" - users with low AI reliance
+    
+    This function maps them to archetype boosts.
+    """
+    hints = {
+        "fast_iterator": 0.0,
+        "careful_tester": 0.0,
+        "debugger": 0.0,
+        "craftsman": 0.0,
+        "explorer": 0.0,
+    }
+    
+    # Map Amplitude cohort names to archetype boosts
+    cohort_mappings = {
+        # Fast Iterator signals
+        "high_run_frequency": ("fast_iterator", 0.2),
+        "rapid_iterators": ("fast_iterator", 0.25),
+        "fast_iterators": ("fast_iterator", 0.3),
+        "speed_coders": ("fast_iterator", 0.2),
+        
+        # Careful Tester signals
+        "high_pass_rate": ("careful_tester", 0.2),
+        "quality_focused": ("careful_tester", 0.25),
+        "careful_testers": ("careful_tester", 0.3),
+        "test_driven": ("careful_tester", 0.2),
+        
+        # Debugger signals
+        "efficient_debuggers": ("debugger", 0.3),
+        "bug_fixers": ("debugger", 0.25),
+        "debuggers": ("debugger", 0.3),
+        "problem_solvers": ("debugger", 0.2),
+        
+        # Craftsman signals
+        "low_ai_reliance": ("craftsman", 0.2),
+        "independent_coders": ("craftsman", 0.25),
+        "craftsmen": ("craftsman", 0.3),
+        "code_quality": ("craftsman", 0.2),
+        
+        # Explorer signals
+        "experimenters": ("explorer", 0.2),
+        "explorers": ("explorer", 0.3),
+        "creative_coders": ("explorer", 0.25),
+        "multi_approach": ("explorer", 0.2),
+        
+        # Integrity signals (boost multiple archetypes)
+        "high_integrity": ("craftsman", 0.15),
+        "focused_users": ("careful_tester", 0.1),
+        
+        # Engagement signals
+        "power_users": ("fast_iterator", 0.1),
+        "engaged_users": ("explorer", 0.1),
+    }
+    
+    for cohort_id in cohort_ids:
+        # Normalize cohort ID for matching
+        cohort_lower = cohort_id.lower().replace("-", "_").replace(" ", "_")
+        
+        for pattern, (archetype, boost) in cohort_mappings.items():
+            if pattern in cohort_lower:
+                hints[archetype] += boost
+    
+    return hints
