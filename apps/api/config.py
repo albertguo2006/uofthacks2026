@@ -42,7 +42,20 @@ class Settings(BaseSettings):
     sandbox_runner_url: str = "http://localhost:8080"
 
     # CORS
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"]
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "https://simplyauthen.tech",
+        "https://www.simplyauthen.tech",
+        "https://awethen.tech",
+        "https://www.awethen.tech",
+        "https://icantdo.tech",
+        "https://www.icantdo.tech",
+        "https://recruitersin.tech",
+        "https://www.recruitersin.tech",
+        "https://uofthacks2026-rlvm.vercel.app",
+    ]
 
     class Config:
         env_file = ".env"
