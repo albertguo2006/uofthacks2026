@@ -12,7 +12,7 @@ export default function RecruiterDashboard() {
         </p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Link
           href="/recruiter/jobs"
           className="p-6 bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-all duration-200 border-2 border-primary-500 hover:shadow-[0_0_15px_rgba(255,255,255,0.5)] hover:ring-2 hover:ring-white/50"
