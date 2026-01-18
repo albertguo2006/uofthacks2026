@@ -21,7 +21,7 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-8">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-5xl font-bold mb-6">
-            Simply Authentic
+            SimplyAuthentic
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 mb-8">
             Your professional identity shouldn&apos;t be self-reported.

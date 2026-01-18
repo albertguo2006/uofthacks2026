@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ['latin'] });
 const GrainOverlay = dynamic(() => import('@/components/ui/GrainOverlay'), { ssr: false });
 
 export const metadata: Metadata = {
-  title: 'Simply Authentic',
+  title: 'SimplyAuthentic',
   description: 'Identity-first freelance marketplace. Prove your skills through behavior, not resumes.',
 };
 

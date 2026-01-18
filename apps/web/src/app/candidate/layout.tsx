@@ -21,7 +21,7 @@ function CandidateNav() {
         <div className="flex justify-between h-16">
           <div className="flex items-center space-x-8">
             <Link href={`/candidate${devSuffix}`} className="font-bold text-lg transition-all duration-200 hover:text-shadow-glow">
-              Simply Authentic
+              SimplyAuthentic
             </Link>
             <Link
               href={`/candidate/tasks${devSuffix}`}

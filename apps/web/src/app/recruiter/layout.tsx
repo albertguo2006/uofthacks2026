@@ -20,7 +20,7 @@ function RecruiterNav() {
         <div className="flex justify-between h-16">
           <div className="flex items-center space-x-8">
             <Link href={`/recruiter${devSuffix}`} className="font-bold text-lg transition-all duration-200 hover:text-shadow-glow">
-              Simply Authentic <span className="text-sm text-gray-500">Recruiter</span>
+              SimplyAuthentic <span className="text-sm text-gray-500">Recruiter</span>
             </Link>
             <Link
               href={`/recruiter/candidates${devSuffix}`}

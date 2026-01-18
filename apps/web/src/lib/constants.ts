@@ -1,4 +1,4 @@
-export const APP_NAME = 'Simply Authentic';
+export const APP_NAME = 'SimplyAuthentic';
 
 export const POLLING_INTERVAL = 5000; // 5 seconds
 
