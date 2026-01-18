@@ -316,7 +316,14 @@ async def assign_archetype(skill_vector: list[float], user_id: str = None) -> tu
     
     If no AI data is available, mathematical + local analytics are weighted higher.
     """
+    print(f"\n\033[96m╔═══════════════════════════════════════════════════════════════╗\033[0m")
+    print(f"\033[96m║ [SkillGraph] ARCHETYPE ASSIGNMENT STARTED                     ║\033[0m")
+    print(f"\033[96m║ User: {(user_id or 'N/A')[:50]:<50} ║\033[0m")
+    print(f"\033[96m║ Skill Vector: {skill_vector}          ║\033[0m")
+    print(f"\033[96m╚═══════════════════════════════════════════════════════════════╝\033[0m")
+    
     if not skill_vector or len(skill_vector) < 5:
+        print(f"\033[93m[SkillGraph] ⚠ Invalid skill vector, returning None\033[0m")
         return None, 0.0
 
     iteration_velocity = skill_vector[0]
@@ -324,6 +331,13 @@ async def assign_archetype(skill_vector: list[float], user_id: str = None) -> tu
     craftsmanship = skill_vector[2]
     tool_fluency = skill_vector[3]
     integrity = skill_vector[4]
+    
+    print(f"\033[96m[SkillGraph] Skill breakdown:\033[0m")
+    print(f"  - iteration_velocity: {iteration_velocity:.3f}")
+    print(f"  - debug_efficiency: {debug_efficiency:.3f}")
+    print(f"  - craftsmanship: {craftsmanship:.3f}")
+    print(f"  - tool_fluency: {tool_fluency:.3f}")
+    print(f"  - integrity: {integrity:.3f}")
 
     # Base scores from skill vector (weight: 40%)
     base_scores = {

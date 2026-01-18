@@ -8,6 +8,7 @@ Background task processor for:
 - Personalized hints based on user's code and past problems
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from db.collections import Collections
@@ -15,25 +16,46 @@ from services.backboard import BackboardService
 from services.user_error_profile import compute_error_profile
 from config import get_settings
 
+# Configure logging
+logger = logging.getLogger("ai_worker")
+logger.setLevel(logging.DEBUG)
+
+# ANSI colors for console
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RED = "\033[91m"
+MAGENTA = "\033[95m"
+RESET = "\033[0m"
+
 
 async def trigger_analysis(session_id: str, user_id: str):
     """
     Intelligently analyze recent events and user behavior to decide when to trigger hints.
     Uses Amplitude-style behavioral analysis for smarter intervention timing.
     """
+    print(f"\n{CYAN}╔═══════════════════════════════════════════════════════════════╗{RESET}")
+    print(f"{CYAN}║ [AI Worker] trigger_analysis called                           ║{RESET}")
+    print(f"{CYAN}║ Session: {session_id[:20]}...                              ║{RESET}")
+    print(f"{CYAN}║ User: {user_id[:20]}...                                 ║{RESET}")
+    print(f"{CYAN}╚═══════════════════════════════════════════════════════════════╝{RESET}")
+    
     settings = get_settings()
 
     if not settings.ai_hint_enabled:
+        print(f"{YELLOW}[AI Worker] ⚠ AI hints are DISABLED in settings{RESET}")
         return
 
     # Fetch session context
     session = await Collections.sessions().find_one({"session_id": session_id})
+    print(f"{CYAN}[AI Worker] Session found: {session is not None}{RESET}")
 
     # Check if user recently acknowledged a hint - avoid spamming
     if session:
         ai_context = session.get("ai_context", {})
         if ai_context.get("is_stuck"):
             # Already showing a hint, don't trigger another
+            print(f"{YELLOW}[AI Worker] ⚠ User already has active hint, skipping{RESET}")
             return
 
         # Check cooldown - don't show hints too frequently
@@ -41,6 +63,7 @@ async def trigger_analysis(session_id: str, user_id: str):
         if last_hint_time and isinstance(last_hint_time, datetime):
             cooldown_ms = settings.hint_cooldown_ms if hasattr(settings, 'hint_cooldown_ms') else 60000
             if (datetime.utcnow() - last_hint_time).total_seconds() * 1000 < cooldown_ms:
+                print(f"{YELLOW}[AI Worker] ⚠ Hint cooldown active, skipping{RESET}")
                 return
 
     # Fetch recent events for this session
@@ -52,20 +75,30 @@ async def trigger_analysis(session_id: str, user_id: str):
         .to_list(30)
     )
 
+    print(f"{CYAN}[AI Worker] Found {len(recent_events)} recent events{RESET}")
+
     if not recent_events:
+        print(f"{YELLOW}[AI Worker] ⚠ No recent events found, skipping{RESET}")
         return
 
     # Analyze behavioral patterns from events
     behavior_analysis = await analyze_user_behavior(user_id, session_id, recent_events)
+    print(f"{CYAN}[AI Worker] Behavior analysis: error_streak={behavior_analysis.get('error_streak', 0)}, time_stuck={behavior_analysis.get('time_stuck_ms', 0)}ms{RESET}")
 
     # Intelligent intervention decision based on behavior patterns
     should_intervene, intervention_reason = should_show_hint(behavior_analysis, settings)
+    print(f"{CYAN}[AI Worker] Should intervene: {should_intervene}, reason: {intervention_reason}{RESET}")
 
     if not should_intervene:
+        print(f"{YELLOW}[AI Worker] ⚠ No intervention needed{RESET}")
         return
+
+    print(f"{GREEN}[AI Worker] ✓ TRIGGERING AI HINT GENERATION!{RESET}")
+    print(f"{MAGENTA}[AI Worker] Reason: {intervention_reason}{RESET}")
 
     # Fetch user's error profile for personalized hints
     error_profile = await compute_error_profile(user_id)
+    print(f"{CYAN}[AI Worker] Error profile loaded: {error_profile.get('has_data', False)}{RESET}")
 
     # Get task information for context
     task_id = session.get("task_id") if session else None
@@ -95,10 +128,17 @@ async def trigger_analysis(session_id: str, user_id: str):
     }
 
     # Initialize Backboard with user context (enables memory)
+    print(f"{CYAN}[AI Worker] Initializing BackboardService for user {user_id[:12]}...{RESET}")
     backboard = BackboardService(user_id)
 
     # Adaptive intervention - Backboard chooses the right model(s)
+    print(f"{MAGENTA}[AI Worker] Calling adaptive_intervention (Claude/GPT-4/Gemini)...{RESET}")
     intervention = await backboard.adaptive_intervention(session_context, error_profile)
+
+    print(f"{GREEN}[AI Worker] ✓ Intervention received!{RESET}")
+    print(f"{CYAN}[AI Worker] Type: {intervention.get('type')}{RESET}")
+    print(f"{CYAN}[AI Worker] Models used: {intervention.get('model_used', [])}{RESET}")
+    print(f"{CYAN}[AI Worker] Hint preview: {intervention.get('hint', 'N/A')[:100]}...{RESET}")
 
     if intervention["type"] != "none":
         hint_category = categorize_hint(intervention)
@@ -317,38 +357,54 @@ def should_show_hint(behavior_analysis: dict, settings) -> tuple[bool, str]:
     repeated_same_error = behavior_analysis.get("repeated_same_error", False)
     tests_passed_trend = behavior_analysis.get("tests_passed_trend", "stable")
     code_change_frequency = behavior_analysis.get("code_change_frequency", "normal")
+    
+    print(f"\n{CYAN}[should_show_hint] Analyzing intervention triggers:{RESET}")
+    print(f"  - frustration_score: {frustration_score:.2f} (threshold: 0.7 for high, 0.4 for moderate)")
+    print(f"  - error_streak: {error_streak} (threshold: {getattr(settings, 'frustration_threshold_errors', 3)})")
+    print(f"  - time_stuck_ms: {time_stuck_ms} (threshold: {getattr(settings, 'frustration_threshold_time_ms', 120000)})")
+    print(f"  - repeated_same_error: {repeated_same_error}")
+    print(f"  - tests_passed_trend: {tests_passed_trend}")
+    print(f"  - code_change_frequency: {code_change_frequency}")
 
     # High frustration score = definitely show hint
     if frustration_score >= 0.7:
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: high_frustration_score{RESET}")
         return True, "high_frustration_score"
 
     # Multiple consecutive errors
     threshold_errors = getattr(settings, 'frustration_threshold_errors', 3)
     if error_streak >= threshold_errors:
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: error_streak ({error_streak} >= {threshold_errors}){RESET}")
         return True, "error_streak"
 
     # Same error repeated multiple times
     if repeated_same_error and error_streak >= 2:
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: repeated_same_error{RESET}")
         return True, "repeated_same_error"
 
     # Stuck for a long time without progress
     threshold_time = getattr(settings, 'frustration_threshold_time_ms', 120000)
     if time_stuck_ms >= threshold_time:
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: time_stuck ({time_stuck_ms} >= {threshold_time}){RESET}")
         return True, "time_stuck"
 
     # Moderate frustration with declining performance
     if frustration_score >= 0.4 and tests_passed_trend == "declining":
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: declining_performance{RESET}")
         return True, "declining_performance"
 
     # Moderate frustration with minimal code changes (really stuck)
     if frustration_score >= 0.4 and code_change_frequency == "minimal":
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: stuck_not_changing_code{RESET}")
         return True, "stuck_not_changing_code"
 
     # Historical context: if user generally finds hints helpful, lower threshold
     historical = behavior_analysis.get("historical_context", {})
     if historical.get("prefers_hints") and frustration_score >= 0.3:
+        print(f"{GREEN}[should_show_hint] ✓ TRIGGER: user_prefers_hints{RESET}")
         return True, "user_prefers_hints"
 
+    print(f"{YELLOW}[should_show_hint] ✗ No trigger conditions met{RESET}")
     return False, "no_intervention_needed"
 
 

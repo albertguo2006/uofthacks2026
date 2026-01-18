@@ -79,7 +79,14 @@ class BackboardService:
             print(f"{GREEN}[Backboard] Created assistant: {name} ({assistant_id_str[:12]}...){RESET}")
             return assistant_id_str
         except Exception as e:
-            print(f"{RED}[Backboard] Failed to create assistant {name}: {e}{RESET}")
+            # Truncate error message to avoid logging huge HTML responses
+            error_msg = str(e)
+            if len(error_msg) > 200:
+                error_msg = error_msg[:200] + "... [truncated]"
+            # Check if it's an HTML response (API error page)
+            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
+                error_msg = "API returned HTML error page (likely 404 or server error)"
+            print(f"{RED}[Backboard] Failed to create assistant {name}: {error_msg}{RESET}")
             return None
 
     async def _get_or_create_thread(self, assistant_id: str, thread_key: str) -> Optional[str]:
@@ -98,7 +105,13 @@ class BackboardService:
             print(f"{DIM}[Backboard] Created thread for {thread_key[:20]}...{RESET}")
             return thread_id_str
         except Exception as e:
-            print(f"{RED}[Backboard] Failed to create thread: {e}{RESET}")
+            # Truncate error message to avoid logging huge HTML responses
+            error_msg = str(e)
+            if len(error_msg) > 200:
+                error_msg = error_msg[:200] + "... [truncated]"
+            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
+                error_msg = "API returned HTML error page (likely 404 or server error)"
+            print(f"{RED}[Backboard] Failed to create thread: {error_msg}{RESET}")
             return None
 
     async def _call_model(
@@ -162,7 +175,13 @@ class BackboardService:
             return result
 
         except Exception as e:
-            print(f"{RED}[Backboard] ✗ Error calling {model_name}: {e}{RESET}")
+            # Truncate error message to avoid logging huge HTML responses
+            error_msg = str(e)
+            if len(error_msg) > 200:
+                error_msg = error_msg[:200] + "... [truncated]"
+            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
+                error_msg = "API returned HTML error page (likely 404 or server error)"
+            print(f"{RED}[Backboard] ✗ Error calling {model_name}: {error_msg}{RESET}")
             print(f"{YELLOW}[Backboard] Falling back to Gemini...{RESET}")
             return await self._gemini_fallback(system_prompt, user_message, thread_key)
 
@@ -1211,8 +1230,8 @@ Please provide a contextual hint based on their journey so far."""
             assistant_name="ContextualHintAssistant",
             system_prompt=system_prompt,
             user_message=user_message,
-            llm_provider="openai",
-            model_name="gpt-4o",
+            llm_provider="anthropic",
+            model_name="claude-3-5-sonnet-20241022",  # Claude for contextual hints
             thread_key=f"session:{session_id}:hints",
             use_memory=True,
         )
