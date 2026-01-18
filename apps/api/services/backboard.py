@@ -4,7 +4,7 @@ Backboard.io Multi-Model AI Service + Direct Gemini API
 Using the backboard-sdk for proper API integration.
 
 Model routing (Two AI Models for hints + archetype):
-- Claude (anthropic/claude-3-5-sonnet) for empathetic hints [PRIMARY for hints]
+- Claude (anthropic/claude-3-7-sonnet-20250219) for empathetic hints [PRIMARY for hints]
   - generate_hint, generate_personalized_hint, generate_targeted_hint
   - generate_encouragement
   - Fallback: Gemini API
@@ -14,9 +14,9 @@ Model routing (Two AI Models for hints + archetype):
   - analyze_code_error - Technical code analysis
   - parse_job_requirements - Job description parsing
   
-- Gemini (direct API - gemini-2.5-flash) for:
+- Gemini (direct API - gemini-2.5-pro) for:
   - Profile summaries & chat
-  - Fallback when Backboard is unavailable
+  - Fallback when Backboard is unavailable (upgraded from flash to pro for better hints)
   
 - Cohere for job parsing (via Backboard - cohere/command-r)
 """
@@ -58,6 +58,12 @@ class BackboardService:
         self.client = BackboardClient(api_key=self.api_key) if self.api_key else None
         # In-memory conversation history for Gemini (keyed by session)
         self._gemini_history: dict[str, list] = {}
+        
+        # Debug: Log API key status on first init
+        if self.api_key:
+            print(f"{DIM}[Backboard] Initialized with API key: {self.api_key[:8]}...{self.api_key[-4:]}{RESET}")
+        else:
+            print(f"{YELLOW}[Backboard] WARNING: No API key configured - will use Gemini fallback{RESET}")
 
     async def _get_or_create_assistant(self, name: str, system_prompt: str) -> Optional[str]:
         """Get or create an assistant by name."""
@@ -69,24 +75,39 @@ class BackboardService:
             return _assistant_cache[cache_key]
 
         try:
-            # SDK uses 'description' for the system prompt
-            assistant = await self.client.create_assistant(
-                name=name,
-                description=system_prompt
-            )
+            # Try different parameter names for SDK compatibility
+            # Older SDK versions use 'description', newer use 'system_prompt'
+            assistant = None
+            try:
+                # Try newer SDK parameter name first
+                assistant = await self.client.create_assistant(
+                    name=name,
+                    system_prompt=system_prompt
+                )
+            except TypeError as te:
+                if "system_prompt" in str(te):
+                    # Fall back to older SDK parameter name
+                    print(f"{YELLOW}[Backboard] SDK uses 'description' parameter, retrying...{RESET}")
+                    assistant = await self.client.create_assistant(
+                        name=name,
+                        description=system_prompt
+                    )
+                else:
+                    raise
+            
             assistant_id_str = str(assistant.assistant_id)
             _assistant_cache[cache_key] = assistant_id_str
             print(f"{GREEN}[Backboard] Created assistant: {name} ({assistant_id_str[:12]}...){RESET}")
             return assistant_id_str
         except Exception as e:
-            # Truncate error message to avoid logging huge HTML responses
+            # Log full error details for debugging
             error_msg = str(e)
-            if len(error_msg) > 200:
-                error_msg = error_msg[:200] + "... [truncated]"
-            # Check if it's an HTML response (API error page)
-            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
-                error_msg = "API returned HTML error page (likely 404 or server error)"
-            print(f"{RED}[Backboard] Failed to create assistant {name}: {error_msg}{RESET}")
+            error_type = type(e).__name__
+            print(f"{RED}[Backboard] Failed to create assistant {name}{RESET}")
+            print(f"{RED}[Backboard] Error type: {error_type}{RESET}")
+            print(f"{RED}[Backboard] Error message: {error_msg[:500]}{RESET}")
+            if len(error_msg) > 500:
+                print(f"{RED}[Backboard] (message truncated, full length: {len(error_msg)} chars){RESET}")
             return None
 
     async def _get_or_create_thread(self, assistant_id: str, thread_key: str) -> Optional[str]:
@@ -105,13 +126,12 @@ class BackboardService:
             print(f"{DIM}[Backboard] Created thread for {thread_key[:20]}...{RESET}")
             return thread_id_str
         except Exception as e:
-            # Truncate error message to avoid logging huge HTML responses
+            # Log full error details for debugging
             error_msg = str(e)
-            if len(error_msg) > 200:
-                error_msg = error_msg[:200] + "... [truncated]"
-            if "<!doctype" in error_msg.lower() or "<html" in error_msg.lower():
-                error_msg = "API returned HTML error page (likely 404 or server error)"
-            print(f"{RED}[Backboard] Failed to create thread: {error_msg}{RESET}")
+            error_type = type(e).__name__
+            print(f"{RED}[Backboard] Failed to create thread{RESET}")
+            print(f"{RED}[Backboard] Error type: {error_type}{RESET}")
+            print(f"{RED}[Backboard] Error message: {error_msg[:500]}{RESET}")
             return None
 
     async def _call_model(
@@ -204,28 +224,33 @@ class BackboardService:
         thread_key: Optional[str] = None,
     ) -> str:
         """
-        Fallback to Gemini when Backboard is unavailable (timeout, no credits, etc.)
+        Fallback to Gemini Pro when Backboard is unavailable (timeout, no credits, etc.)
         Combines system prompt and user message for Gemini's format.
         """
-        print(f"{YELLOW}[Fallback] Using Gemini as fallback for Backboard{RESET}")
+        print(f"\n{YELLOW}╭─────────────────────────────────────────────────────────────╮{RESET}")
+        print(f"{YELLOW}│ [Fallback] Backboard failed → Using Gemini Pro              │{RESET}")
+        print(f"{YELLOW}╰─────────────────────────────────────────────────────────────╯{RESET}")
 
         # Build session key for conversation continuity if thread_key provided
         session_key = f"{self.user_id}:fallback:{thread_key}" if thread_key else None
 
-        # Call Gemini with the system prompt as instruction
+        # Call Gemini Pro with the system prompt as instruction
+        # Using higher max_tokens for better hint quality
         result = await self._call_gemini(
             prompt=user_message,
             system_instruction=system_prompt,
             session_key=session_key,
             temperature=0.7,
-            max_tokens=500,
+            max_tokens=800,  # Increased for better hints
+            use_pro_model=True,  # Explicitly use Pro for fallback
         )
 
         # If Gemini also fails, return the basic fallback
         if not result or result == self._fallback_response([]):
-            print(f"{RED}[Fallback] Gemini also failed, using basic fallback{RESET}")
+            print(f"{RED}[Fallback] ✗ Gemini Pro also failed, using static fallback{RESET}")
             return self._fallback_response([{"content": user_message}])
 
+        print(f"{GREEN}[Fallback] ✓ Gemini Pro provided hint successfully{RESET}")
         return result
 
     def _strip_markdown_json(self, response: str) -> str:
@@ -249,13 +274,18 @@ class BackboardService:
         session_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 500,
+        use_pro_model: bool = True,  # Use the more capable Pro model by default
     ) -> str:
         """
-        Direct call to Gemini API (gemini-2.0-flash).
+        Direct call to Gemini API.
+        - gemini-2.5-pro: More capable, better reasoning (default for hints/fallback)
+        - gemini-2.5-flash: Faster, cheaper (use for simple tasks)
         Supports conversation history via session_key.
         """
+        model_name = "gemini-2.5-pro" if use_pro_model else "gemini-2.5-flash"
+        
         print(f"\n{MAGENTA}╭─────────────────────────────────────────────────────────────╮{RESET}")
-        print(f"{MAGENTA}│ [Gemini] Direct API Call (gemini-2.5-flash){RESET}")
+        print(f"{MAGENTA}│ [Gemini] Direct API Call ({model_name}){RESET}")
         print(f"{MAGENTA}├─────────────────────────────────────────────────────────────┤{RESET}")
 
         if session_key:
@@ -298,7 +328,7 @@ class BackboardService:
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{GEMINI_API_URL}/gemini-2.5-flash:generateContent?key={self.gemini_api_key}",
+                    f"{GEMINI_API_URL}/{model_name}:generateContent?key={self.gemini_api_key}",
                     headers={"Content-Type": "application/json"},
                     json=payload,
                 )
@@ -307,7 +337,7 @@ class BackboardService:
                 result = response.json()
                 response_text = result["candidates"][0]["content"]["parts"][0]["text"]
 
-                print(f"{GREEN}[Gemini] ✓ Response received ({len(response_text)} chars){RESET}")
+                print(f"{GREEN}[Gemini] ✓ {model_name} responded ({len(response_text)} chars){RESET}")
                 print(f"{DIM}[Gemini] Response: {response_text[:150]}...{RESET}" if len(response_text) > 150 else f"{DIM}[Gemini] Response: {response_text}{RESET}")
 
                 if session_key:
@@ -393,7 +423,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for empathetic hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for empathetic hints
             thread_key=f"hints:{self.user_id}",
             use_memory=True,
         )
@@ -410,7 +440,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=f"Context: {context}",
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for empathetic responses
+            model_name="claude-3-7-sonnet-20250219",  # Claude for empathetic responses
             thread_key=f"encouragement:{self.user_id}",
         )
 
@@ -453,7 +483,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for personalized hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for personalized hints
             thread_key=f"personalized_hints:{self.user_id}",
             use_memory=True,
         )
@@ -692,18 +722,18 @@ Analyze the behavioral patterns holistically. Consider:
 6. Learning patterns (fix efficiency, error recovery)
 
 Return ONLY valid JSON in this exact format:
-{
+{{
   "archetype": "archetype_name",
   "confidence": 0.X,
   "reasoning": "Brief 1-2 sentence explanation",
-  "adjustments": {
+  "adjustments": {{
     "fast_iterator": 0.X,
     "careful_tester": 0.X,
     "debugger": 0.X,
     "craftsman": 0.X,
     "explorer": 0.X
-  }
-}"""
+  }}
+}}"""
 
         user_message = f"""Analyze this developer's behavior and assign an archetype:
 
@@ -728,6 +758,10 @@ Provide your archetype assignment with confidence and reasoning."""
                 thread_key=f"archetype:{self.user_id}",
                 use_memory=False,  # Fresh analysis each time
             )
+            
+            # Log the raw response for debugging
+            print(f"{CYAN}[AI Archetype] Raw GPT-4 response:{RESET}")
+            print(f"{DIM}{response[:500]}{'...' if len(response) > 500 else ''}{RESET}")
             
             result = json.loads(self._strip_markdown_json(response))
             
@@ -756,6 +790,7 @@ Provide your archetype assignment with confidence and reasoning."""
             
         except json.JSONDecodeError as e:
             print(f"{RED}[AI Archetype] ✗ Failed to parse GPT-4 response: {e}{RESET}")
+            print(f"{RED}[AI Archetype] Raw response was: {response[:300]}{'...' if len(response) > 300 else ''}{RESET}")
             return self._fallback_archetype_assignment(skill_vector)
         except Exception as e:
             print(f"{RED}[AI Archetype] ✗ GPT-4 archetype assignment failed: {e}{RESET}")
@@ -1157,7 +1192,7 @@ This is attempt #{attempt_count}. Please provide a helpful hint."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for targeted hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for targeted hints
             thread_key=f"targeted_hints:{self.user_id}:{hint_type}",
             use_memory=True,
         )
@@ -1231,7 +1266,7 @@ Please provide a contextual hint based on their journey so far."""
             system_prompt=system_prompt,
             user_message=user_message,
             llm_provider="anthropic",
-            model_name="claude-3-5-sonnet-20241022",  # Claude for contextual hints
+            model_name="claude-3-7-sonnet-20250219",  # Claude for contextual hints
             thread_key=f"session:{session_id}:hints",
             use_memory=True,
         )
