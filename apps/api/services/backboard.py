@@ -14,9 +14,9 @@ Model routing (Two AI Models for hints + archetype):
   - analyze_code_error - Technical code analysis
   - parse_job_requirements - Job description parsing
   
-- Gemini (direct API - gemini-2.5-flash) for:
+- Gemini (direct API - gemini-2.5-pro) for:
   - Profile summaries & chat
-  - Fallback when Backboard is unavailable
+  - Fallback when Backboard is unavailable (upgraded from flash to pro for better hints)
   
 - Cohere for job parsing (via Backboard - cohere/command-r)
 """
@@ -58,6 +58,12 @@ class BackboardService:
         self.client = BackboardClient(api_key=self.api_key) if self.api_key else None
         # In-memory conversation history for Gemini (keyed by session)
         self._gemini_history: dict[str, list] = {}
+        
+        # Debug: Log API key status on first init
+        if self.api_key:
+            print(f"{DIM}[Backboard] Initialized with API key: {self.api_key[:8]}...{self.api_key[-4:]}{RESET}")
+        else:
+            print(f"{YELLOW}[Backboard] WARNING: No API key configured - will use Gemini fallback{RESET}")
 
     async def _get_or_create_assistant(self, name: str, system_prompt: str) -> Optional[str]:
         """Get or create an assistant by name."""
@@ -69,10 +75,10 @@ class BackboardService:
             return _assistant_cache[cache_key]
 
         try:
-            # SDK uses 'description' for the system prompt
+            # SDK v1.4+ uses 'system_prompt' parameter
             assistant = await self.client.create_assistant(
                 name=name,
-                description=system_prompt
+                system_prompt=system_prompt
             )
             assistant_id_str = str(assistant.assistant_id)
             _assistant_cache[cache_key] = assistant_id_str
@@ -204,28 +210,33 @@ class BackboardService:
         thread_key: Optional[str] = None,
     ) -> str:
         """
-        Fallback to Gemini when Backboard is unavailable (timeout, no credits, etc.)
+        Fallback to Gemini Pro when Backboard is unavailable (timeout, no credits, etc.)
         Combines system prompt and user message for Gemini's format.
         """
-        print(f"{YELLOW}[Fallback] Using Gemini as fallback for Backboard{RESET}")
+        print(f"\n{YELLOW}╭─────────────────────────────────────────────────────────────╮{RESET}")
+        print(f"{YELLOW}│ [Fallback] Backboard failed → Using Gemini Pro              │{RESET}")
+        print(f"{YELLOW}╰─────────────────────────────────────────────────────────────╯{RESET}")
 
         # Build session key for conversation continuity if thread_key provided
         session_key = f"{self.user_id}:fallback:{thread_key}" if thread_key else None
 
-        # Call Gemini with the system prompt as instruction
+        # Call Gemini Pro with the system prompt as instruction
+        # Using higher max_tokens for better hint quality
         result = await self._call_gemini(
             prompt=user_message,
             system_instruction=system_prompt,
             session_key=session_key,
             temperature=0.7,
-            max_tokens=500,
+            max_tokens=800,  # Increased for better hints
+            use_pro_model=True,  # Explicitly use Pro for fallback
         )
 
         # If Gemini also fails, return the basic fallback
         if not result or result == self._fallback_response([]):
-            print(f"{RED}[Fallback] Gemini also failed, using basic fallback{RESET}")
+            print(f"{RED}[Fallback] ✗ Gemini Pro also failed, using static fallback{RESET}")
             return self._fallback_response([{"content": user_message}])
 
+        print(f"{GREEN}[Fallback] ✓ Gemini Pro provided hint successfully{RESET}")
         return result
 
     def _strip_markdown_json(self, response: str) -> str:
@@ -249,13 +260,18 @@ class BackboardService:
         session_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 500,
+        use_pro_model: bool = True,  # Use the more capable Pro model by default
     ) -> str:
         """
-        Direct call to Gemini API (gemini-2.0-flash).
+        Direct call to Gemini API.
+        - gemini-2.5-pro: More capable, better reasoning (default for hints/fallback)
+        - gemini-2.5-flash: Faster, cheaper (use for simple tasks)
         Supports conversation history via session_key.
         """
+        model_name = "gemini-2.5-pro" if use_pro_model else "gemini-2.5-flash"
+        
         print(f"\n{MAGENTA}╭─────────────────────────────────────────────────────────────╮{RESET}")
-        print(f"{MAGENTA}│ [Gemini] Direct API Call (gemini-2.5-flash){RESET}")
+        print(f"{MAGENTA}│ [Gemini] Direct API Call ({model_name}){RESET}")
         print(f"{MAGENTA}├─────────────────────────────────────────────────────────────┤{RESET}")
 
         if session_key:
@@ -298,7 +314,7 @@ class BackboardService:
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{GEMINI_API_URL}/gemini-2.5-flash:generateContent?key={self.gemini_api_key}",
+                    f"{GEMINI_API_URL}/{model_name}:generateContent?key={self.gemini_api_key}",
                     headers={"Content-Type": "application/json"},
                     json=payload,
                 )
@@ -307,7 +323,7 @@ class BackboardService:
                 result = response.json()
                 response_text = result["candidates"][0]["content"]["parts"][0]["text"]
 
-                print(f"{GREEN}[Gemini] ✓ Response received ({len(response_text)} chars){RESET}")
+                print(f"{GREEN}[Gemini] ✓ {model_name} responded ({len(response_text)} chars){RESET}")
                 print(f"{DIM}[Gemini] Response: {response_text[:150]}...{RESET}" if len(response_text) > 150 else f"{DIM}[Gemini] Response: {response_text}{RESET}")
 
                 if session_key:
