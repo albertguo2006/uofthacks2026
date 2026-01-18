@@ -28,7 +28,14 @@ settings = get_settings()
 # CORS - explicit origins for credential support
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "https://simplyauthen.tech",
+        "https://www.simplyauthen.tech",
+        "https://uofthacks2026-rlvm.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
